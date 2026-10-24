@@ -8,7 +8,7 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '128kb' }));
 
-const VERSION = '4.1.1';
+const VERSION = '4.2.2';
 const port = Number(process.env.PORT || 8080);
 const token = process.env.WPGO_RENDER_TOKEN || '';
 const allowInsecureNoToken = process.env.WPGO_RENDER_ALLOW_NO_TOKEN === '1';
