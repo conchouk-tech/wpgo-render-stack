@@ -1,7 +1,8 @@
-FROM node:22-bookworm-slim
+FROM mcr.microsoft.com/playwright:v1.50.0-noble
 WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev && npx playwright install --with-deps chromium
-COPY server.js ./
+COPY package*.json ./
+RUN npm install --omit=dev
+COPY server.js ./server.js
+ENV NODE_ENV=production
 EXPOSE 8080
 CMD ["npm", "start"]
