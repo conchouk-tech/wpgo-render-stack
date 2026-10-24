@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: wpgo-renderer
+    runtime: docker
+    plan: 1c-2g
+    dockerfilePath: ./renderer/Dockerfile
+    dockerContext: ./renderer
+    healthCheckPath: /health
+    envVars:
+      - key: WPGO_RENDER_TOKEN
+        generateValue: true
+      - key: WPGO_RENDER_ALLOW_ANY_PUBLIC
+        value: "1"
+      - key: WPGO_RENDER_MAX_CONCURRENCY
+        value: "2"
+      - key: PORT
+        value: "10000"
+
+  - type: web
+    name: wpgo-control-plane
+    runtime: docker
+    plan: 0.5c-512mb
+    dockerfilePath: ./control-plane/Dockerfile
+    dockerContext: ./control-plane
+    healthCheckPath: /health
+    disk:
+      name: wpgo-control-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: WPGO_CONTROL_ADMIN_TOKEN
+        generateValue: true
+      - key: WPGO_SIGNING_KEY_PATH
+        value: /data/signing-key.pem
+      - key: WPGO_LICENSE_STORE
+        value: /data/licenses.json
+      - key: WPGO_CONTROL_AUDIT_LOG
+        value: /data/audit.jsonl
+      - key: WPGO_RELEASE_VERSION
+        value: 4.1.0
+      - key: WPGO_RELEASE_PACKAGE
+        value: ""
+      - key: WPGO_RELEASE_SHA256
+        value: ""
+      - key: WPGO_RELEASE_URL
+        value: ""
+      - key: PORT
+        value: "10000"
