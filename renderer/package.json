@@ -1,0 +1,8 @@
+{
+  "name": "wpgo-renderer",
+  "private": true,
+  "version": "4.1.0",
+  "type": "module",
+  "scripts": {"start": "node server.js"},
+  "dependencies": {"express": "^5.0.0", "playwright": "^1.50.0"}
+}
