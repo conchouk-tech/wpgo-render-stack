@@ -7,7 +7,7 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
 
-const VERSION = '4.1.0';
+const VERSION = '4.1.1';
 const port = Number(process.env.PORT || 8090);
 const adminToken = process.env.WPGO_CONTROL_ADMIN_TOKEN || '';
 const signingKeyPath = process.env.WPGO_SIGNING_KEY_PATH || '';
