@@ -29,8 +29,10 @@ services:
         generateValue: true
       - key: WPGO_LICENSES_JSON
         value: "{}"
+      - key: WPGO_REVOKED_LICENSE_IDS
+        value: ""
       - key: WPGO_RELEASE_VERSION
-        value: "4.1.1"
+        value: "4.2.0"
       - key: WPGO_RELEASE_PACKAGE
         value: ""
       - key: WPGO_RELEASE_SHA256
