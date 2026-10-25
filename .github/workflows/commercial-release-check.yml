@@ -1,0 +1,27 @@
+name: WPGo commercial release checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - 'release/**'
+
+permissions:
+  contents: read
+
+jobs:
+  static-release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify PHP CLI
+        run: php -v
+      - name: Run WPGo release checks
+        run: bash scripts/release-check.sh
