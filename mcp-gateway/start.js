@@ -1,87 +1,12 @@
 import crypto from 'node:crypto';
-import express from 'express';
 import './outbound-guard.js';
-
-const originalSet = express.response.set;
-express.response.set = function patchedSet(field, value) {
-  if (typeof field === 'object' && field !== null) {
-    const next = { ...field };
-    if (typeof next['Content-Security-Policy'] === 'string') {
-      next['Content-Security-Policy'] = next['Content-Security-Policy'].replace("form-action 'self'", "form-action 'self' https:");
-    }
-    return originalSet.call(this, next);
-  }
-  if (String(field).toLowerCase() === 'content-security-policy' && typeof value === 'string') {
-    value = value.replace("form-action 'self'", "form-action 'self' https:");
-  }
-  return originalSet.call(this, field, value);
-};
-
-const nativeFetch = globalThis.fetch;
-globalThis.fetch = async (input, options = {}) => {
-  let url = '';
-  try {
-    url = typeof input === 'string' ? input : input?.url || String(input || '');
-  } catch {}
-  let wordpressProbe = false;
-  try {
-    wordpressProbe = new URL(url).pathname.endsWith('/wp-json/') || new URL(url).pathname === '/wp-json';
-  } catch {}
-  const started = Date.now();
-  if (wordpressProbe) {
-    console.log(JSON.stringify({ event: 'wordpress_probe_started', target: url }));
-  }
-  try {
-    const response = await nativeFetch(input, options);
-    if (wordpressProbe) {
-      let capabilitySummary = {};
-      try {
-        const data = await response.clone().json();
-        const routeNames = Object.keys(data?.routes || {});
-        const authEndpoint = data?.authentication?.['application-passwords']?.endpoints?.authorization || '';
-        capabilitySummary = {
-          route_count: routeNames.length,
-          has_wpgo: routeNames.some(route => route.startsWith('/wpgo/v1')),
-          has_approval_proxy: routeNames.some(route => route.includes('/wpgo/v1/abilities/run')),
-          has_application_password_auth: Boolean(authEndpoint),
-          application_password_auth_origin: (() => {
-            try { return authEndpoint ? new URL(authEndpoint).origin : ''; } catch { return 'invalid'; }
-          })(),
-          application_password_auth_path: (() => {
-            try { return authEndpoint ? new URL(authEndpoint).pathname : ''; } catch { return 'invalid'; }
-          })()
-        };
-      } catch (error) {
-        capabilitySummary = { parse_error: String(error?.message || error).slice(0, 160) };
-      }
-      console.log(JSON.stringify({
-        event: 'wordpress_probe_finished',
-        target: url,
-        status: response.status,
-        location: response.headers.get('location') || '',
-        duration_ms: Date.now() - started,
-        ...capabilitySummary
-      }));
-    }
-    return response;
-  } catch (error) {
-    if (wordpressProbe) {
-      console.error(JSON.stringify({
-        event: 'wordpress_probe_failed',
-        target: url,
-        error: String(error?.message || error).slice(0, 300),
-        duration_ms: Date.now() - started
-      }));
-    }
-    throw error;
-  }
-};
-
-await import('./server-v3.js');
+import { resourceForSite } from './site-link.js';
+import './server-rc.js';
 
 const port = Number(process.env.PORT || 8095);
 const local = `http://127.0.0.1:${port}`;
 const publicBase = String(process.env.WPGO_MCP_PUBLIC_BASE || local).replace(/\/$/, '');
+const secret = String(process.env.WPGO_MCP_SECRET || '');
 
 async function request(url, options = {}) {
   const response = await fetch(url, { redirect: 'manual', ...options });
@@ -96,10 +21,12 @@ async function selfTest() {
   try {
     const health = await request(`${local}/health`);
     checks.health = health.ok && health.data?.ok === true;
+    checks.version = health.data?.version === '1.4.0-rc.1' && health.data?.product_version === '4.5.0-rc.1';
     checks.shared_state = health.data?.oauth_shared_state_required
       ? health.data?.oauth_code_store === 'redis'
       : true;
     checks.approval_proxy = health.data?.approval_proxy === true;
+    checks.wordpress_first = health.data?.wordpress_first_onboarding === true && health.data?.site_specific_mcp_urls === true;
 
     const protectedResource = await request(`${local}/.well-known/oauth-protected-resource/mcp`);
     checks.resource_metadata =
@@ -107,6 +34,26 @@ async function selfTest() {
       protectedResource.data?.resource === `${publicBase}/mcp` &&
       Array.isArray(protectedResource.data?.authorization_servers) &&
       protectedResource.data.authorization_servers.includes(publicBase);
+
+    const siteResource = resourceForSite(publicBase, 'https://example.com/blog/', secret);
+    const sitePath = new URL(siteResource).pathname;
+    const siteMetadata = await request(`${local}/.well-known/oauth-protected-resource${sitePath}`);
+    checks.site_resource_metadata =
+      siteMetadata.ok &&
+      siteMetadata.data?.resource === siteResource &&
+      siteMetadata.data?.authorization_servers?.includes(publicBase);
+
+    const siteMcp = await request(`${local}${sitePath}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream'
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
+    });
+    checks.site_mcp_oauth_challenge =
+      siteMcp.status === 401 &&
+      String(siteMcp.headers.get('www-authenticate') || '').includes(`/.well-known/oauth-protected-resource${sitePath}`);
 
     const authMetadata = await request(`${local}/.well-known/oauth-authorization-server`);
     checks.authorization_metadata =
@@ -160,7 +107,7 @@ async function selfTest() {
       const authorization = await request(authorizeUrl.toString());
       checks.authorization_page =
         authorization.status === 200 &&
-        authorization.text.includes('Connect WPGo');
+        authorization.text.includes('compatibility connection route');
     }
 
     const badPkceUrl = new URL(`${local}/oauth/authorize`);
@@ -190,9 +137,13 @@ async function selfTest() {
 
   const required = [
     'health',
+    'version',
     'shared_state',
     'approval_proxy',
+    'wordpress_first',
     'resource_metadata',
+    'site_resource_metadata',
+    'site_mcp_oauth_challenge',
     'authorization_metadata',
     'insecure_redirect_rejected',
     'dynamic_client_registration',
@@ -202,7 +153,8 @@ async function selfTest() {
   ];
   console.log(JSON.stringify({
     event: 'wpgo_mcp_self_test',
-    ok: required.every(key => checks[key] === true),
+    version: '4.5.0-rc.1',
+    ok: required.every(check => checks[check] === true),
     checks
   }));
 }
