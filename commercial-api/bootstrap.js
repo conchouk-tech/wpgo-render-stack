@@ -24,6 +24,11 @@ async function promoteFounderSites() {
          SELECT 1 FROM wpgo_sites s
          WHERE s.account_id = a.id
            AND LOWER(s.site_host) = ANY($1::text[])
+       )
+       OR EXISTS (
+         SELECT 1 FROM wpgo_usage_events u
+         WHERE u.account_id = a.id
+           AND LOWER(u.site_host) = ANY($1::text[])
        )`,
       [founderSiteHosts]
     );
