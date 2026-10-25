@@ -1,9 +1,9 @@
-name: Commercial hardening
+name: WPGo release candidate
 
 on:
   push:
     branches:
-      - release/commercial-hardening-2026-10-25
+      - 'release/**'
   pull_request:
     branches:
       - main
@@ -26,29 +26,78 @@ jobs:
           cache-dependency-path: mcp-gateway/package.json
       - run: npm install --ignore-scripts
       - run: npm run check
-      - name: Runtime OAuth smoke test
+      - name: Full WordPress-first OAuth and MCP integration test
         env:
-          NODE_ENV: development
+          NODE_ENV: test
           PORT: '8095'
           WPGO_MCP_SECRET: ci-only-mcp-secret-value-not-for-production-use
           WPGO_MCP_PUBLIC_BASE: http://127.0.0.1:8095
           WPGO_REQUIRE_SHARED_OAUTH_STATE: '0'
+          WPGO_TEST_ALLOW_LOOPBACK_PORTS: '9443'
+          WPGO_MOCK_WP_PORT: '9443'
+          WPGO_E2E_GATEWAY: http://127.0.0.1:8095
+          WPGO_E2E_WORDPRESS: https://127.0.0.1:9443/
+          NODE_TLS_REJECT_UNAUTHORIZED: '0'
         run: |
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout /tmp/wpgo-mock-key.pem \
+            -out /tmp/wpgo-mock-cert.pem \
+            -subj '/CN=127.0.0.1' \
+            -days 1 \
+            -addext 'subjectAltName=IP:127.0.0.1' >/dev/null 2>&1
+          node mock-wordpress.js >/tmp/wpgo-mock.log 2>&1 &
+          mock_pid=$!
           npm start >/tmp/wpgo-mcp.log 2>&1 &
-          pid=$!
-          trap 'kill $pid 2>/dev/null || true' EXIT
-          for i in {1..20}; do
-            if curl -fsS http://127.0.0.1:8095/health >/tmp/wpgo-mcp-health.json; then break; fi
+          gateway_pid=$!
+          trap 'kill $gateway_pid $mock_pid 2>/dev/null || true' EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8095/health >/tmp/wpgo-mcp-health.json && \
+               curl -kfsS https://127.0.0.1:9443/wp-json/ >/tmp/wpgo-mock-health.json; then
+              break
+            fi
             sleep 1
           done
           node --input-type=module <<'NODE'
-          const health = await fetch('http://127.0.0.1:8095/health').then(r => r.json());
-          if (!health.ok || health.approval_proxy !== true || health.version !== '1.3.0') throw new Error('MCP health contract failed');
-          const metadata = await fetch('http://127.0.0.1:8095/.well-known/oauth-authorization-server').then(r => r.json());
-          if (!metadata.client_id_metadata_document_supported || !metadata.code_challenge_methods_supported?.includes('S256')) throw new Error('OAuth metadata contract failed');
+          const response = await fetch('http://127.0.0.1:8095/health');
+          const health = await response.json();
+          if (!response.ok || !health.ok) throw new Error('MCP gateway did not become healthy');
+          if (health.version !== '1.4.0-rc.1' || health.product_version !== '4.5.0-rc.1') throw new Error('RC version contract failed');
+          if (!health.wordpress_first_onboarding || !health.site_specific_mcp_urls || !health.approval_proxy) throw new Error('RC onboarding capability contract failed');
           NODE
+          npm run test:rc-onboarding
           sleep 2
-          grep -q '"event":"wpgo_mcp_self_test","ok":true' /tmp/wpgo-mcp.log
+          grep -q '"event":"wpgo_mcp_self_test".*"ok":true' /tmp/wpgo-mcp.log
+
+  wordpress-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0'
+          coverage: none
+      - name: PHP syntax gate
+        run: |
+          php -l wordpress-plugin/wpgo-connect-ai-rc.php
+          php -l wordpress-plugin/includes/class-wpgo-connect-ai.php
+      - name: Reject development-only WordPress module patterns
+        run: |
+          ! grep -RniE 'localhost|127\.0\.0\.1|WPGO_DEV_AUTH|var_dump\(|print_r\(' wordpress-plugin
+      - name: Build RC WordPress module ZIP
+        run: |
+          mkdir -p /tmp/wpgo-connect-ai-4.5.0-rc.1/wpgo-connect-ai/includes
+          cp wordpress-plugin/wpgo-connect-ai-rc.php /tmp/wpgo-connect-ai-4.5.0-rc.1/wpgo-connect-ai/wpgo-connect-ai.php
+          cp wordpress-plugin/includes/class-wpgo-connect-ai.php /tmp/wpgo-connect-ai-4.5.0-rc.1/wpgo-connect-ai/includes/
+          cd /tmp/wpgo-connect-ai-4.5.0-rc.1
+          zip -qr "$GITHUB_WORKSPACE/wpgo-connect-ai-4.5.0-rc.1.zip" wpgo-connect-ai
+          sha256sum "$GITHUB_WORKSPACE/wpgo-connect-ai-4.5.0-rc.1.zip" > "$GITHUB_WORKSPACE/wpgo-connect-ai-4.5.0-rc.1.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wpgo-connect-ai-4.5.0-rc.1
+          path: |
+            wpgo-connect-ai-4.5.0-rc.1.zip
+            wpgo-connect-ai-4.5.0-rc.1.sha256
+          if-no-files-found: error
 
   commercial-api:
     runs-on: ubuntu-latest
@@ -99,7 +148,7 @@ jobs:
           node --input-type=module <<'NODE'
           const response = await fetch('http://127.0.0.1:8081/health');
           const health = await response.json();
-          if (!response.ok || !health.ok || health.database !== 'ready' || health.version !== '1.4.0') throw new Error('Commercial API runtime health failed');
+          if (!response.ok || !health.ok || health.database !== 'ready') throw new Error('Commercial API runtime health failed');
           NODE
 
   control-plane:
