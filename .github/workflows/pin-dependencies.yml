@@ -1,0 +1,37 @@
+name: Pin WPGo RC dependencies
+
+on:
+  push:
+    branches:
+      - release/wpgo-4.5.0-rc1
+
+permissions:
+  contents: write
+
+jobs:
+  lockfiles:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/wpgo-4.5.0-rc1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate exact npm lockfiles
+        run: |
+          for dir in mcp-gateway commercial-api portal control-plane; do
+            (cd "$dir" && npm install --package-lock-only --ignore-scripts)
+          done
+      - name: Commit lockfiles if changed
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mcp-gateway/package-lock.json commercial-api/package-lock.json portal/package-lock.json control-plane/package-lock.json
+          if git diff --cached --quiet; then
+            echo 'Lockfiles already current.'
+            exit 0
+          fi
+          git commit -m 'Pin WPGo 4.5 RC dependency lockfiles'
+          git push origin HEAD:release/wpgo-4.5.0-rc1
