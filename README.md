@@ -25,6 +25,7 @@ Commercial production defaults are fail-closed:
 - OAuth authorization codes are one-time and the Redis row does not contain plaintext WordPress credentials.
 - PKCE S256 is mandatory and redirect URIs are strictly validated.
 - WordPress subdirectory installs such as `https://example.com/blog/` remain distinct and supported.
+- Non-read-only MCP actions use WPGo's WordPress approval proxy and cannot execute until the user approves the requested action.
 - Site licences are issued only for sites registered to the account. Unbound licences are disabled by default.
 - Usage consumption is serialized per account so concurrent requests cannot race past the plan allowance.
 - Email login codes are attempt-limited and verified transactionally.
@@ -34,20 +35,20 @@ Commercial production defaults are fail-closed:
 
 ## Required production configuration
 
-`render.yaml` generates secrets that can safely be independent:
+`render.yaml` generates and wires the internal secrets that can safely be machine-managed:
 
 - `WPGO_MCP_SECRET`
 - `WPGO_SIGNING_SEED`
 - `WPGO_SESSION_SECRET`
 - `WPGO_PORTAL_CSRF_SECRET`
 - `WPGO_RENDER_TOKEN`
+- `WPGO_CONTROL_ADMIN_TOKEN` — generated on the control plane and injected into the commercial API from that service.
 
-The following values must be supplied before a production release:
+The following external values must be supplied before the related production features are enabled:
 
-- `WPGO_CONTROL_ADMIN_TOKEN` — set the **same strong secret** on both `wpgo-control-plane-ga` and `wpgo-commercial-api`.
 - `RESEND_API_KEY`
 - `WPGO_LOGIN_FROM_EMAIL`
-- Stripe secret, webhook secret and price IDs when paid billing is enabled.
+- Stripe secret, webhook secret and all eight monthly/yearly price IDs when paid billing is enabled.
 - Final `WPGO_RELEASE_PACKAGE`, `WPGO_RELEASE_SHA256` and `WPGO_RELEASE_URL` before automatic commercial updates are enabled.
 
 Do not expose the control-plane admin token, session secret, MCP secret, renderer token or Stripe secret to WordPress or to an AI client.
@@ -71,6 +72,7 @@ The gateway supports:
 - Client ID Metadata Documents for modern clients.
 - Dynamic Client Registration as a compatibility fallback.
 - Native loopback redirect URIs where allowed by OAuth client rules.
+- WPGo approval-gated write actions, exposed as normal MCP tools with read/write annotations.
 
 No AI-provider API key is required by WPGo itself. Provider-specific model authentication remains between the end user and their chosen AI provider.
 
@@ -89,7 +91,7 @@ Before promoting a release to production, also complete end-to-end staging tests
 1. New account email sign-in.
 2. WordPress pairing and licence return.
 3. MCP authorization from at least two independent standards-compatible AI clients.
-4. Read-only and mutating WordPress abilities.
+4. Read-only and mutating WordPress abilities, including approval and approval-status flows.
 5. Access-token expiry and refresh.
 6. Multiple sites on one account, including a WordPress subdirectory install.
 7. Plan quota enforcement under concurrent requests.
