@@ -32,25 +32,7 @@ async function promoteFounderSites() {
        )`,
       [founderSiteHosts]
     );
-    const usageHosts = await pool.query(
-      `SELECT COALESCE(NULLIF(LOWER(site_host),''),'[blank]') AS host, COUNT(*)::int AS events
-       FROM wpgo_usage_events
-       WHERE created_at > NOW()-INTERVAL '24 hours'
-       GROUP BY 1 ORDER BY events DESC LIMIT 20`
-    );
-    const registeredHosts = await pool.query(
-      `SELECT LOWER(site_host) AS host, COUNT(*)::int AS sites
-       FROM wpgo_sites GROUP BY 1 ORDER BY sites DESC LIMIT 20`
-    );
-    const accounts = await pool.query(
-      `SELECT a.id::text AS id, a.plan, a.is_founder, a.subscription_status,
-              a.created_at, COUNT(s.id)::int AS site_count
-       FROM wpgo_accounts a
-       LEFT JOIN wpgo_sites s ON s.account_id=a.id
-       GROUP BY a.id,a.plan,a.is_founder,a.subscription_status,a.created_at
-       ORDER BY a.created_at ASC`
-    );
-    console.log(JSON.stringify({event:'founder_bootstrap',promoted:promoted.rowCount,founderSiteHosts,usageHosts:usageHosts.rows,registeredHosts:registeredHosts.rows,accounts:accounts.rows}));
+    console.log(JSON.stringify({event:'founder_bootstrap',promoted:promoted.rowCount,host_count:founderSiteHosts.length}));
   } finally {
     await pool.end();
   }
