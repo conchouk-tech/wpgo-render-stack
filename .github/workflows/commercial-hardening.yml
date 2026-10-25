@@ -1,0 +1,67 @@
+name: Commercial hardening
+
+on:
+  push:
+    branches:
+      - release/commercial-hardening-2026-10-25
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-gateway:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mcp-gateway/package.json
+      - run: npm install --ignore-scripts
+      - run: npm run check
+
+  commercial-api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: commercial-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: commercial-api/package.json
+      - run: npm install --ignore-scripts
+      - run: npm run check
+
+  control-plane:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: control-plane
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: control-plane/package.json
+      - run: npm install --ignore-scripts
+      - run: npm run check
+
+  renderer-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check renderer/server.js
