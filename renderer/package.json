@@ -1,12 +1,12 @@
 {
   "name": "wpgo-renderer",
   "private": true,
-  "version": "4.5.0",
+  "version": "4.5.1",
   "type": "module",
   "engines": {"node": ">=20"},
   "scripts": {
-    "start": "node server-v3.js",
-    "check": "node --check server-v3.js"
+    "start": "node server-v4.js",
+    "check": "node --check server-v4.js"
   },
   "dependencies": {
     "express": "^5.0.0",
