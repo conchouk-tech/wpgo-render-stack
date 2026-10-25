@@ -5,8 +5,8 @@
   "type": "module",
   "engines": {"node": ">=20"},
   "scripts": {
-    "start": "node server-v2.js",
-    "check": "node --check server-v2.js"
+    "start": "node server-v3.js",
+    "check": "node --check server-v3.js"
   },
   "dependencies": {
     "express": "^5.0.0",
