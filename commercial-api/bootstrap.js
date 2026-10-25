@@ -7,4 +7,4 @@ if (nodeEnv === 'production' && process.env.WPGO_DEV_AUTH === '1') {
 
 const { runCommercialPreflight } = await import('./preflight.js');
 await runCommercialPreflight();
-await import('./server-v3.js');
+await import('./server-v4.js');
