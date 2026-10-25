@@ -1,4 +1,3 @@
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const PKCE_VERIFIER_RE = /^[A-Za-z0-9\-._~]{43,128}$/;
 const PKCE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
 
@@ -14,11 +13,20 @@ function hasUnsafeAuthority(url) {
   return Boolean(url.username || url.password || url.hash);
 }
 
+function isLoopbackHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  if (host === 'localhost' || host === '[::1]' || host === '::1') return true;
+  const parts = host.split('.');
+  if (parts.length !== 4 || parts.some(part => !/^\d{1,3}$/.test(part))) return false;
+  const numbers = parts.map(Number);
+  return numbers[0] === 127 && numbers.every(part => part >= 0 && part <= 255);
+}
+
 export function safeHttpsUrl(value, { allowLoopbackHttp = false } = {}) {
   const url = parseUrl(value);
   if (!url || hasUnsafeAuthority(url)) return null;
   if (url.protocol === 'https:') return url;
-  if (allowLoopbackHttp && url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) return url;
+  if (allowLoopbackHttp && url.protocol === 'http:' && isLoopbackHost(url.hostname)) return url;
   return null;
 }
 
@@ -32,18 +40,17 @@ export function normalizeSite(value) {
 }
 
 export function validRedirectUri(value) {
-  const url = safeHttpsUrl(value, { allowLoopbackHttp: true });
-  if (!url || url.hash) return false;
-  return true;
+  return Boolean(safeHttpsUrl(value, { allowLoopbackHttp: true }));
 }
 
 export function validClientMetadataUrl(value) {
-  const url = safeHttpsUrl(value);
+  const raw = String(value || '').trim();
+  const url = safeHttpsUrl(raw);
   if (!url) return false;
   if (url.search || url.hash) return false;
   if (url.pathname === '/' || !url.pathname) return false;
-  const segments = url.pathname.split('/').filter(Boolean);
-  if (segments.some(segment => segment === '.' || segment === '..')) return false;
+  const rawPath = raw.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, '').split(/[?#]/, 1)[0];
+  if (/(^|\/)\.{1,2}(\/|$)/.test(rawPath)) return false;
   return true;
 }
 
