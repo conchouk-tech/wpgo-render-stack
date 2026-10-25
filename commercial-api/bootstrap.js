@@ -40,4 +40,7 @@ async function promoteFounderSites() {
 
 await promoteFounderSites();
 await import('./multisite-license-guard.js');
+const loginEmail = await import('./login-email-route.js');
+loginEmail.installLoginEmailRouteGuard();
 await import('./server-v2.js');
+loginEmail.restoreLoginEmailRouteGuard();
