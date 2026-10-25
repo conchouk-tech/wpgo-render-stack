@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import './outbound-guard.js';
 import './server.js';
 
 const port = Number(process.env.PORT || 8095);
