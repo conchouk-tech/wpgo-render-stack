@@ -24,7 +24,9 @@ test('normalizeSite rejects insecure and credential-bearing URLs', () => {
 test('redirect URI validation permits HTTPS and native loopback HTTP only', () => {
   assert.equal(validRedirectUri('https://client.example/callback'), true);
   assert.equal(validRedirectUri('http://127.0.0.1:49152/callback'), true);
+  assert.equal(validRedirectUri('http://127.0.0.42:49152/callback'), true);
   assert.equal(validRedirectUri('http://localhost:49152/callback'), true);
+  assert.equal(validRedirectUri('http://[::1]:49152/callback'), true);
   assert.equal(validRedirectUri('http://example.com/callback'), false);
   assert.equal(validRedirectUri('https://client.example/callback#fragment'), false);
   assert.equal(validRedirectUri('https://user:pass@client.example/callback'), false);
@@ -34,6 +36,7 @@ test('CIMD client IDs require a stable HTTPS document URL', () => {
   assert.equal(validClientMetadataUrl('https://client.example/.well-known/oauth-client.json'), true);
   assert.equal(validClientMetadataUrl('https://client.example/'), false);
   assert.equal(validClientMetadataUrl('https://client.example/client.json?x=1'), false);
+  assert.equal(validClientMetadataUrl('https://client.example/a/../client.json'), false);
   assert.equal(validClientMetadataUrl('http://client.example/client.json'), false);
 });
 
