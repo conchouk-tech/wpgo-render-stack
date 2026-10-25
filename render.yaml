@@ -100,6 +100,10 @@ services:
         value: "https://wpgo-commercial-web.onrender.com"
       - key: WPGO_DEV_AUTH
         value: "0"
+      - key: WPGO_REQUIRE_EMAIL
+        value: "1"
+      - key: WPGO_REQUIRE_BILLING
+        value: "1"
       - key: WPGO_FOUNDER_EMAILS
         sync: false
       - key: WPGO_EMAIL_PROVIDER
