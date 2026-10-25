@@ -32,7 +32,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: cd mcp-gateway && npm install
+    buildCommand: cd mcp-gateway && npm ci
     startCommand: cd mcp-gateway && npm start
     healthCheckPath: /health
     envVars:
@@ -71,7 +71,7 @@ services:
       - key: WPGO_REVOKED_LICENSE_IDS
         value: ""
       - key: WPGO_RELEASE_VERSION
-        value: "4.4.5"
+        value: "4.5.0-rc.1"
       - key: WPGO_RELEASE_PACKAGE
         value: ""
       - key: WPGO_RELEASE_SHA256
@@ -86,7 +86,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: cd portal && npm install
+    buildCommand: cd portal && npm ci
     startCommand: cd portal && npm start
     healthCheckPath: /health
     envVars:
@@ -102,7 +102,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: cd commercial-api && npm install
+    buildCommand: cd commercial-api && npm ci
     startCommand: cd commercial-api && npm start
     healthCheckPath: /health
     envVars:
