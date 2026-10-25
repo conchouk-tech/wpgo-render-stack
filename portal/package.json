@@ -1,12 +1,12 @@
 {
   "name": "wpgo-commercial-portal",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.6.1",
   "type": "module",
   "engines": {"node": ">=20"},
   "scripts": {
-    "start": "node app6.js",
-    "check": "node --check app6.js"
+    "start": "node --import ./preauth-guard.js app6.js",
+    "check": "node --check preauth-guard.js && node --check app6.js"
   },
   "dependencies": {"express": "^4.21.2"}
 }
