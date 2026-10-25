@@ -29,10 +29,12 @@ function founderValidationWrapper(handler){
         if(founderMismatch){
           const repaired={...payload,status:'active',founder_unlimited_sites:true,checked_gmt:new Date().toISOString()};
           console.log(JSON.stringify({event:'founder_site_binding_bypass',license_id:String(payload.license_id||'').slice(0,80)}));
-          return originalStatus(200).json(sign(repaired));
+          originalStatus(200);
+          return originalJson(sign(repaired));
         }
       }catch(error){console.error(JSON.stringify({event:'founder_license_guard_error',message:String(error?.message||error).slice(0,300)}));}
-      return originalStatus(statusCode).json(body);
+      originalStatus(statusCode);
+      return originalJson(body);
     };
     return handler(req,res,next);
   };
