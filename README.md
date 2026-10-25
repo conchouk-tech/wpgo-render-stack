@@ -2,7 +2,7 @@
 
 WPGo connects WordPress to AI clients through **MCP (Model Context Protocol)** rather than through a ChatGPT-specific integration. The preferred production path is direct, OAuth-protected remote MCP from the AI client to the customer's WordPress site.
 
-That means ChatGPT is one supported client, not the architecture. Claude and other OAuth-capable remote MCP clients can use the same WPGo endpoint without an OpenAI API key.
+That means ChatGPT is one supported client, not the architecture. Claude and other OAuth-capable remote MCP clients can use the same WPGo endpoint without an OpenAI or Anthropic API key being stored by WPGo.
 
 ## Commercial architecture
 
@@ -42,19 +42,27 @@ The 1.4.1 hardening build adds:
 - request IDs, timeouts, security headers and graceful shutdown;
 - a provider-neutral connection manifest and connection profile.
 
-### 3. Control plane
+### 3. Commercial portal
 
-`wpgo-control-plane-ga` signs licences and commercial update metadata with Ed25519. Production refuses to start without a strong admin token and signing identity.
+`wpgo-commercial-web` 1.6.0 provides account, billing, site pairing and support UI. Authenticated mutations are CSRF protected, the session uses a host-scoped secure cookie, pairing requires explicit confirmation of the WordPress hostname, outbound API calls time out, and external billing redirects are restricted to Stripe.
 
-A licence can be bound to one or more site hosts. The installed WordPress runtime is not remotely disabled when the licence service is unavailable; licensing controls commercial entitlement, updates and hosted services.
+The portal includes an **AI connection** view for each registered site. It shows the same MCP endpoint for ChatGPT, Claude and other compatible remote MCP clients instead of presenting ChatGPT as a special connection type.
 
-### 4. Renderer
+### 4. Control plane
+
+`wpgo-control-plane-ga` 4.5.1 signs licences and commercial update metadata with Ed25519. Production refuses to start without a strong admin token, signing identity and database connection.
+
+Commercial licences are site-bound by default; unbound licences are disabled in the production blueprint. Revocation is persisted immediately in Postgres and no longer requires editing an environment variable and redeploying. The static environment revocation list remains available only as an emergency/fallback deny-list.
+
+The installed WordPress runtime is not remotely disabled when the licence service is unavailable; licensing controls commercial entitlement, updates and hosted services.
+
+### 5. Renderer
 
 `wpgo-renderer-ga` supports arbitrary **licensed** customer sites rather than a hard-coded WPGo test hostname. It validates public network targets, blocks private-address targets, locks main-frame navigation to the requested origin and validates subresource URLs.
 
 The previous static renderer bearer token remains only as an internal/backward-compatible path. It is not the normal customer authorization model.
 
-### 5. Optional hosted MCP gateway
+### 6. Optional hosted MCP gateway
 
 `mcp-gateway/` is a compatibility path for clients that need a single hosted MCP endpoint. It is **not the default commercial connection path** because its Application Password bridge necessarily handles a WordPress application credential centrally.
 
@@ -62,19 +70,21 @@ The gateway has been hardened with a fixed production issuer, public-network-onl
 
 ## Render Blueprint
 
-`render.yaml` configures the GA renderer, control plane, commercial portal and commercial API. It deliberately does not promote the optional MCP gateway to GA.
+`render.yaml` configures the GA renderer, control plane, commercial portal and commercial API in Frankfurt. It deliberately does not promote the optional MCP gateway to GA.
 
 Production settings include:
 
 - `NODE_ENV=production` on all relevant services;
 - a shared control-plane admin secret;
-- generated session/signing secrets;
+- generated session, CSRF and signing secrets;
+- Postgres-backed account data and licence revocation state;
+- site-bound commercial licences with unbound issuance disabled;
 - no hard-coded customer/test hostname;
 - no HTTP/no-token renderer escape hatch;
 - real email and billing required by default;
 - Stripe/email secrets represented as manually supplied secret values, never committed to GitHub.
 
-**Important for existing Render services:** values declared with `sync: false` must be populated in Render before the 4.5 deployment. Do not deploy the commercial API until email, Stripe and price IDs are present, because the hardened API intentionally fails closed rather than presenting a half-working product.
+**Important for existing Render services:** values declared with `sync: false` must be populated in Render before the 4.5 deployment. Do not deploy the commercial API until email, Stripe and price IDs are present, because the hardened API intentionally fails closed rather than presenting a half-working product. Existing services also need the control-plane database binding and any new generated secrets applied before switching to the hardening branch.
 
 ## Release process
 
@@ -90,8 +100,9 @@ bash scripts/release-check.sh
 
 - WPGo plugin connector: **4.5.0**
 - Commercial API: **1.4.1**
-- Control plane: **4.5.0**
+- Commercial portal: **1.6.0**
+- Control plane: **4.5.1**
 - Renderer: **4.5.0**
 - Optional MCP gateway: **1.1.0**
 
-This branch is a commercial hardening candidate. It should be reviewed and tested before it replaces the currently deployed `main` release.
+This branch is a commercial hardening candidate. It should be reviewed and tested before it replaces the currently deployed `main` release. The full current WordPress plugin source/ZIP is not present in this repository or the connected files, so integrating and testing the 4.5 connector in the actual distributable remains a release blocker rather than something this repository should pretend is complete.
