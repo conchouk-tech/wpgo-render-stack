@@ -23,6 +23,7 @@ services:
     plan: free
     maxmemoryPolicy: noeviction
     persistenceMode: off
+    ipAllowList: []
 
   - type: web
     name: wpgo-mcp-ga
@@ -37,6 +38,8 @@ services:
         generateValue: true
       - key: WPGO_MCP_PUBLIC_BASE
         value: "https://wpgo-mcp-ga.onrender.com"
+      - key: WPGO_MCP_TEST_SITE
+        value: "https://wpgo.vivaforte.es"
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -94,6 +97,13 @@ services:
           property: connectionString
       - key: WPGO_SESSION_SECRET
         generateValue: true
+      - key: WPGO_CONTROL_ADMIN_TOKEN
+        fromService:
+          name: wpgo-control-plane-ga
+          type: web
+          envVarKey: WPGO_CONTROL_ADMIN_TOKEN
+      - key: WPGO_PORTAL_URL
+        value: "https://wpgo-commercial-web.onrender.com"
       - key: WPGO_DEV_AUTH
         value: "0"
       - key: RESEND_API_KEY
@@ -103,6 +113,22 @@ services:
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_SOLO
+        sync: false
+      - key: STRIPE_PRICE_SOLO_YEARLY
+        sync: false
+      - key: STRIPE_PRICE_PRO
+        sync: false
+      - key: STRIPE_PRICE_PRO_YEARLY
+        sync: false
+      - key: STRIPE_PRICE_AGENCY
+        sync: false
+      - key: STRIPE_PRICE_AGENCY_YEARLY
+        sync: false
+      - key: STRIPE_PRICE_SCALE
+        sync: false
+      - key: STRIPE_PRICE_SCALE_YEARLY
         sync: false
 
 databases:
