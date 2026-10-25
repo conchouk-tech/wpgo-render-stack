@@ -1,5 +1,6 @@
 import pg from 'pg';
 import './runtime-readiness.js';
+await import('./stripe-runtime-check.js');
 
 const { Pool } = pg;
 const databaseUrl = process.env.DATABASE_URL || '';
