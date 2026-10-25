@@ -81,6 +81,8 @@ services:
         value: "production"
       - key: WPGO_COMMERCIAL_API
         value: "https://wpgo-commercial-api.onrender.com"
+      - key: WPGO_PORTAL_PUBLIC_BASE
+        value: "https://wpgo-commercial-web.onrender.com"
       - key: WPGO_PORTAL_CSRF_SECRET
         generateValue: true
       - key: WPGO_PORTAL_API_TIMEOUT_MS
