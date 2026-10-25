@@ -1,12 +1,12 @@
 {
   "name": "wpgo-mcp-gateway",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "engines": {"node": ">=22"},
   "scripts": {
     "start": "node start.js",
-    "check": "node --check server.js && node --check start.js && node --check state-store.js"
+    "check": "node --check server-v2.js && node --check start.js && node --check state-store.js && node --check outbound-guard.js"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
