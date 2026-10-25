@@ -22,6 +22,7 @@ jobs:
           - commercial-api
           - portal
           - control-plane
+          - renderer
     defaults:
       run:
         working-directory: ${{ matrix.component }}
@@ -30,8 +31,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install dependencies
-        run: npm install --ignore-scripts
+      - name: Install pinned dependencies
+        run: npm ci --ignore-scripts
       - name: Reject high or critical advisories
         run: npm audit --audit-level=high
 
