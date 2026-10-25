@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import './outbound-guard.js';
-import './server.js';
+import './server-v3.js';
 
 const port = Number(process.env.PORT || 8095);
 const local = `http://127.0.0.1:${port}`;
@@ -22,6 +22,7 @@ async function selfTest() {
     checks.shared_state = health.data?.oauth_shared_state_required
       ? health.data?.oauth_code_store === 'redis'
       : true;
+    checks.approval_proxy = health.data?.approval_proxy === true;
 
     const protectedResource = await request(`${local}/.well-known/oauth-protected-resource/mcp`);
     checks.resource_metadata =
@@ -113,6 +114,7 @@ async function selfTest() {
   const required = [
     'health',
     'shared_state',
+    'approval_proxy',
     'resource_metadata',
     'authorization_metadata',
     'insecure_redirect_rejected',
