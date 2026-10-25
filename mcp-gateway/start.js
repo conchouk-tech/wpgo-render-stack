@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
 import './outbound-guard.js';
-import './server.js';
+import './server-v2.js';
 
 const port = Number(process.env.PORT || 8095);
 const local = `http://127.0.0.1:${port}`;
 const publicBase = String(process.env.WPGO_MCP_PUBLIC_BASE || local).replace(/\/$/,'');
 const testSite = String(process.env.WPGO_MCP_TEST_SITE || '').replace(/\/$/,'');
+const redisExpected = Boolean(String(process.env.REDIS_URL || '').trim());
 
 async function request(url, options={}) {
   const r = await fetch(url, options);
@@ -16,7 +17,10 @@ async function request(url, options={}) {
 async function selfTest(){
   const checks={};
   try{
-    const health=await request(`${local}/health`); checks.health=health.ok&&health.data?.ok===true;
+    const health=await request(`${local}/health`);
+    checks.health=health.ok&&health.data?.ok===true;
+    checks.approval_proxy=health.data?.approval_proxy===true;
+    checks.oauth_state_store=!redisExpected||health.data?.oauth_code_store==='redis';
     const prm=await request(`${local}/.well-known/oauth-protected-resource/mcp`); checks.resource_metadata=prm.ok&&prm.data?.resource===`${publicBase}/mcp`;
     const asm=await request(`${local}/.well-known/oauth-authorization-server`); checks.authorization_metadata=asm.ok&&asm.data?.authorization_endpoint===`${publicBase}/oauth/authorize`&&asm.data?.token_endpoint===`${publicBase}/oauth/token`;
     const reg=await request(`${local}/oauth/register`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({client_name:'WPGo startup self-test',redirect_uris:['https://client.example.test/callback']})});
@@ -33,11 +37,11 @@ async function selfTest(){
     if(testSite){
       const idx=await request(`${testSite}/wp-json/`);const routes=idx.data?.routes||{};
       checks.wordpress_reachable=idx.ok;
-      checks.wpgo_detected=idx.ok&&(Object.keys(routes).some(k=>k.startsWith('/wpgo/v1'))||Object.keys(routes).some(k=>k.startsWith('/wp-abilities/v1')));
+      checks.wpgo_detected=idx.ok&&Object.keys(routes).some(k=>k.startsWith('/wpgo/v1'));
       checks.application_password_auth=Boolean(idx.data?.authentication?.['application-passwords']?.endpoints?.authorization);
     }
   }catch(error){checks.exception=String(error?.message||error).slice(0,300);}
-  const required=['health','resource_metadata','authorization_metadata','dynamic_client_registration','authorization_page','mcp_oauth_challenge'];
+  const required=['health','approval_proxy','oauth_state_store','resource_metadata','authorization_metadata','dynamic_client_registration','authorization_page','mcp_oauth_challenge'];
   if(testSite)required.push('wordpress_reachable','wpgo_detected','application_password_auth');
   console.log(JSON.stringify({event:'wpgo_mcp_self_test',ok:required.every(k=>checks[k]===true),checks}));
 }
