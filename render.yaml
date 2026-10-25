@@ -6,6 +6,8 @@ services:
     dockerfilePath: ./renderer/Dockerfile
     dockerContext: ./renderer
     envVars:
+      - key: NODE_ENV
+        value: "production"
       - key: WPGO_RENDER_TOKEN
         generateValue: true
       - key: WPGO_RENDER_ALLOWED_HOSTS
@@ -34,12 +36,14 @@ services:
     startCommand: cd mcp-gateway && npm start
     healthCheckPath: /health
     envVars:
+      - key: NODE_ENV
+        value: "production"
+      - key: WPGO_REQUIRE_SHARED_OAUTH_STATE
+        value: "1"
       - key: WPGO_MCP_SECRET
         generateValue: true
       - key: WPGO_MCP_PUBLIC_BASE
         value: "https://wpgo-mcp-ga.onrender.com"
-      - key: WPGO_MCP_TEST_SITE
-        value: "https://wpgo.vivaforte.es"
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -54,10 +58,14 @@ services:
     dockerContext: ./control-plane
     healthCheckPath: /health
     envVars:
+      - key: NODE_ENV
+        value: "production"
       - key: WPGO_CONTROL_ADMIN_TOKEN
         generateValue: true
       - key: WPGO_SIGNING_SEED
         generateValue: true
+      - key: WPGO_ALLOW_UNBOUND_LICENSES
+        value: "0"
       - key: WPGO_LICENSES_JSON
         value: "{}"
       - key: WPGO_REVOKED_LICENSE_IDS
@@ -81,6 +89,13 @@ services:
     buildCommand: cd portal && npm install
     startCommand: cd portal && npm start
     healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: "production"
+      - key: WPGO_PORTAL_CSRF_SECRET
+        generateValue: true
+      - key: WPGO_COMMERCIAL_API
+        value: "https://wpgo-commercial-api.onrender.com"
 
   - type: web
     name: wpgo-commercial-api
@@ -91,6 +106,8 @@ services:
     startCommand: cd commercial-api && npm start
     healthCheckPath: /health
     envVars:
+      - key: NODE_ENV
+        value: "production"
       - key: DATABASE_URL
         fromDatabase:
           name: wpgo-commercial-db

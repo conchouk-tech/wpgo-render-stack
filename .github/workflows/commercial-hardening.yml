@@ -1,0 +1,195 @@
+name: Commercial hardening
+
+on:
+  push:
+    branches:
+      - release/commercial-hardening-2026-10-25
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-gateway:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mcp-gateway/package.json
+      - run: npm install --ignore-scripts
+      - run: npm run check
+      - name: Runtime OAuth smoke test
+        env:
+          NODE_ENV: development
+          PORT: '8095'
+          WPGO_MCP_SECRET: ci-only-mcp-secret-value-not-for-production-use
+          WPGO_MCP_PUBLIC_BASE: http://127.0.0.1:8095
+          WPGO_REQUIRE_SHARED_OAUTH_STATE: '0'
+        run: |
+          npm start >/tmp/wpgo-mcp.log 2>&1 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8095/health >/tmp/wpgo-mcp-health.json; then break; fi
+            sleep 1
+          done
+          node --input-type=module <<'NODE'
+          const health = await fetch('http://127.0.0.1:8095/health').then(r => r.json());
+          if (!health.ok || health.approval_proxy !== true || health.version !== '1.3.0') throw new Error('MCP health contract failed');
+          const metadata = await fetch('http://127.0.0.1:8095/.well-known/oauth-authorization-server').then(r => r.json());
+          if (!metadata.client_id_metadata_document_supported || !metadata.code_challenge_methods_supported?.includes('S256')) throw new Error('OAuth metadata contract failed');
+          NODE
+          sleep 2
+          grep -q '"event":"wpgo_mcp_self_test","ok":true' /tmp/wpgo-mcp.log
+
+  commercial-api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-database-password
+          POSTGRES_DB: wpgo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d wpgo"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    defaults:
+      run:
+        working-directory: commercial-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: commercial-api/package.json
+      - run: npm install --ignore-scripts
+      - run: npm run check
+      - name: Database and API startup smoke test
+        env:
+          NODE_ENV: production
+          PORT: '8081'
+          DATABASE_URL: postgresql://postgres:ci-database-password@localhost:5432/wpgo
+          WPGO_SESSION_SECRET: ci-only-session-secret-value-not-for-production-use
+          WPGO_CONTROL_ADMIN_TOKEN: ci-only-control-token-value-not-for-production-use
+          WPGO_DEV_AUTH: '0'
+          RESEND_API_KEY: ci-email-provider-placeholder
+          WPGO_LOGIN_FROM_EMAIL: noreply@example.com
+        run: |
+          npm start >/tmp/wpgo-api.log 2>&1 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in {1..25}; do
+            if curl -fsS http://127.0.0.1:8081/health >/tmp/wpgo-api-health.json; then break; fi
+            sleep 1
+          done
+          node --input-type=module <<'NODE'
+          const response = await fetch('http://127.0.0.1:8081/health');
+          const health = await response.json();
+          if (!response.ok || !health.ok || health.database !== 'ready' || health.version !== '1.4.0') throw new Error('Commercial API runtime health failed');
+          NODE
+
+  control-plane:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: control-plane
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: control-plane/package.json
+      - run: npm install --ignore-scripts
+      - run: npm run check
+      - name: Signed licence issue and validate smoke test
+        env:
+          NODE_ENV: production
+          PORT: '8090'
+          WPGO_CONTROL_ADMIN_TOKEN: ci-only-control-token-value-not-for-production-use
+          WPGO_SIGNING_SEED: ci-only-signing-seed-not-for-production-use
+          WPGO_ALLOW_UNBOUND_LICENSES: '0'
+        run: |
+          npm start >/tmp/wpgo-control.log 2>&1 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8090/health >/tmp/wpgo-control-health.json; then break; fi
+            sleep 1
+          done
+          node --input-type=module <<'NODE'
+          const admin = process.env.WPGO_CONTROL_ADMIN_TOKEN;
+          const issuedResponse = await fetch('http://127.0.0.1:8090/v1/admin/license/issue', {
+            method: 'POST',
+            headers: {'content-type':'application/json', authorization:`Bearer ${admin}`},
+            body: JSON.stringify({plan:'pro', site_hosts:['example.com'], features:['updates','support']})
+          });
+          const issued = await issuedResponse.json();
+          if (!issuedResponse.ok || !issued.license_key?.startsWith('wpgo1.')) throw new Error('Licence issue failed');
+          const validatedResponse = await fetch('http://127.0.0.1:8090/v1/license/validate', {
+            method: 'POST', headers: {'content-type':'application/json'},
+            body: JSON.stringify({license_key:issued.license_key, site_url:'https://example.com/'})
+          });
+          const validated = await validatedResponse.json();
+          if (!validatedResponse.ok || validated.payload?.status !== 'active') throw new Error('Licence validation failed');
+          NODE
+
+  portal:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: portal/package.json
+      - run: npm install --ignore-scripts
+      - run: npm run check
+      - name: Production startup smoke test
+        env:
+          NODE_ENV: production
+          PORT: '8080'
+          WPGO_PORTAL_CSRF_SECRET: ci-only-csrf-secret-value-not-for-production-use
+          WPGO_COMMERCIAL_API: https://wpgo-commercial-api.example.com
+        run: |
+          npm start >/tmp/wpgo-portal.log 2>&1 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8080/health >/tmp/wpgo-portal-health.json; then break; fi
+            sleep 1
+          done
+          node --input-type=module <<'NODE'
+          const response = await fetch('http://127.0.0.1:8080/health');
+          const health = await response.json();
+          if (!response.ok || !health.ok || health.pairing_confirmation !== true || health.csrf_protection !== true) throw new Error('Portal runtime health failed');
+          NODE
+
+  renderer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: renderer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check
