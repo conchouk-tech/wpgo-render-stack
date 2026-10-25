@@ -1,8 +1,12 @@
 {
   "name": "wpgo-control-plane",
   "private": true,
-  "version": "4.2.2",
+  "version": "4.5.0",
   "type": "module",
-  "scripts": {"start": "node seed-bootstrap.js"},
+  "engines": {"node": ">=20"},
+  "scripts": {
+    "start": "node seed-bootstrap.js",
+    "check": "node --check seed-bootstrap.js && node --check server-v2.js"
+  },
   "dependencies": {"express": "^5.0.0"}
 }
