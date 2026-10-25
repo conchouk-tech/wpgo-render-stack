@@ -82,7 +82,7 @@ jobs:
         env:
           NODE_ENV: production
           PORT: '8081'
-          DATABASE_URL: postgresql://postgres:ci-database-password@127.0.0.1:5432/wpgo
+          DATABASE_URL: postgresql://postgres:ci-database-password@localhost:5432/wpgo
           WPGO_SESSION_SECRET: ci-only-session-secret-value-not-for-production-use
           WPGO_CONTROL_ADMIN_TOKEN: ci-only-control-token-value-not-for-production-use
           WPGO_DEV_AUTH: '0'
