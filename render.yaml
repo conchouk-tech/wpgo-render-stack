@@ -6,6 +6,8 @@ services:
     dockerfilePath: ./renderer/Dockerfile
     dockerContext: ./renderer
     envVars:
+      - key: NODE_ENV
+        value: "production"
       - key: WPGO_RENDER_TOKEN
         generateValue: true
       - key: WPGO_RENDER_ALLOWED_HOSTS
@@ -23,6 +25,7 @@ services:
     plan: free
     maxmemoryPolicy: noeviction
     persistenceMode: off
+    ipAllowList: []
 
   - type: web
     name: wpgo-mcp-ga
@@ -58,7 +61,7 @@ services:
       - key: NODE_ENV
         value: "production"
       - key: WPGO_CONTROL_ADMIN_TOKEN
-        sync: false
+        generateValue: true
       - key: WPGO_SIGNING_SEED
         generateValue: true
       - key: WPGO_ALLOW_UNBOUND_LICENSES
@@ -112,7 +115,12 @@ services:
       - key: WPGO_SESSION_SECRET
         generateValue: true
       - key: WPGO_CONTROL_ADMIN_TOKEN
-        sync: false
+        fromService:
+          name: wpgo-control-plane-ga
+          type: web
+          envVarKey: WPGO_CONTROL_ADMIN_TOKEN
+      - key: WPGO_PORTAL_URL
+        value: "https://wpgo-commercial-web.onrender.com"
       - key: WPGO_DEV_AUTH
         value: "0"
       - key: RESEND_API_KEY
@@ -122,6 +130,22 @@ services:
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_SOLO
+        sync: false
+      - key: STRIPE_PRICE_SOLO_YEARLY
+        sync: false
+      - key: STRIPE_PRICE_PRO
+        sync: false
+      - key: STRIPE_PRICE_PRO_YEARLY
+        sync: false
+      - key: STRIPE_PRICE_AGENCY
+        sync: false
+      - key: STRIPE_PRICE_AGENCY_YEARLY
+        sync: false
+      - key: STRIPE_PRICE_SCALE
+        sync: false
+      - key: STRIPE_PRICE_SCALE_YEARLY
         sync: false
 
 databases:
