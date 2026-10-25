@@ -5,8 +5,8 @@
   "type": "module",
   "engines": {"node": ">=22"},
   "scripts": {
-    "start": "node server.js",
-    "check": "node --check server.js"
+    "start": "node start.js",
+    "check": "node --check server.js && node --check start.js"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
