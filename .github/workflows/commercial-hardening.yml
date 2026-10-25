@@ -57,11 +57,29 @@ jobs:
       - run: npm install --ignore-scripts
       - run: npm run check
 
-  renderer-syntax:
+  portal:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check renderer/server.js
+          cache: npm
+          cache-dependency-path: portal/package.json
+      - run: npm install --ignore-scripts
+      - run: npm run check
+
+  renderer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: renderer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check
