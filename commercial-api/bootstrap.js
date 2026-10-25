@@ -39,4 +39,5 @@ async function promoteFounderSites() {
 }
 
 await promoteFounderSites();
+await import('./multisite-license-guard.js');
 await import('./server-v2.js');
