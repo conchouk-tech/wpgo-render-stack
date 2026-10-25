@@ -11,4 +11,4 @@ if (!process.env.WPGO_SIGNING_PRIVATE_KEY_PEM && process.env.WPGO_SIGNING_SEED) 
   process.env.WPGO_SIGNING_PRIVATE_KEY_PEM = privateKeyPemFromSeed(process.env.WPGO_SIGNING_SEED);
 }
 
-await import('./server-v2.js');
+await import('./server-v3.js');
