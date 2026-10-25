@@ -2,8 +2,9 @@ import express from 'express';
 import crypto from 'node:crypto';
 import { createMcpHandler, McpServer, fromJsonSchema } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
+import { createAuthCodeStore } from './state-store.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const port = Number(process.env.PORT || 8095);
 const configuredBase = String(process.env.WPGO_MCP_PUBLIC_BASE || '').replace(/\/$/, '');
 const rawSecret = String(process.env.WPGO_MCP_SECRET || '');
@@ -12,7 +13,7 @@ if (rawSecret.length < 32) {
   process.exit(1);
 }
 const key = crypto.createHash('sha256').update(rawSecret).digest();
-const authCodes = new Map();
+const authCodes = await createAuthCodeStore();
 const abilityCache = new Map();
 
 const BLOCKED_ABILITIES = new Set([
@@ -86,7 +87,7 @@ function html(res, body, status = 200) {
     'X-Frame-Options':'DENY', 'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https:; base-uri 'none'; frame-ancestors 'none'"
   }).send(body);
 }
-function esc(v='') { return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function esc(v='') { return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c])); }
 function oauthErrorRedirect(redirectUri, error, description, state='') {
   const u = new URL(redirectUri);
   u.searchParams.set('error', error);
@@ -129,11 +130,6 @@ async function loadClient(clientId, redirectUri) {
   if (!r.ok || !r.data || !Array.isArray(r.data.redirect_uris) || !r.data.redirect_uris.includes(redirectUri)) return null;
   return {client_id:clientId, client_name:String(r.data.client_name || 'MCP client'), redirect_uris:r.data.redirect_uris};
 }
-function cleanupCodes() {
-  const now = Date.now();
-  for (const [code, row] of authCodes) if (row.expiresAt < now) authCodes.delete(code);
-}
-setInterval(cleanupCodes, 60000).unref();
 
 async function fetchAbilities(auth) {
   const cacheKey = crypto.createHash('sha256').update(`${auth.site_url}|${auth.username}`).digest('hex');
@@ -208,7 +204,7 @@ app.use((req,res,next)=>{res.set('X-Content-Type-Options','nosniff');res.set('Re
 app.use(express.urlencoded({extended:false,limit:'32kb'}));
 app.use(express.json({limit:'1mb'}));
 
-app.get('/health',(req,res)=>res.json({ok:true,service:'wpgo-mcp-gateway',version:VERSION,mcp_url:mcpUrl(req),oauth:true,protocols:['2026-07-28','legacy-stateless'],wordpress_abilities:true}));
+app.get('/health',(req,res)=>res.json({ok:true,service:'wpgo-mcp-gateway',version:VERSION,mcp_url:mcpUrl(req),oauth:true,oauth_code_store:authCodes.mode(),protocols:['2026-07-28','legacy-stateless'],wordpress_abilities:true}));
 app.get(['/.well-known/oauth-protected-resource','/.well-known/oauth-protected-resource/mcp'],(req,res)=>res.json({resource:mcpUrl(req),authorization_servers:[baseUrl(req)],scopes_supported:['mcp'],bearer_methods_supported:['header']}));
 app.get('/.well-known/oauth-authorization-server',(req,res)=>{const b=baseUrl(req);res.json({issuer:b,authorization_endpoint:`${b}/oauth/authorize`,token_endpoint:`${b}/oauth/token`,registration_endpoint:`${b}/oauth/register`,response_types_supported:['code'],grant_types_supported:['authorization_code','refresh_token'],code_challenge_methods_supported:['S256'],token_endpoint_auth_methods_supported:['none'],scopes_supported:['mcp']});});
 app.post('/oauth/register',(req,res)=>{
@@ -231,9 +227,10 @@ app.post('/oauth/authorize/site',async(req,res)=>{
   const site=normalizeSite(req.body?.site); if(!site)return html(res,'<h1>Invalid site</h1><p>Enter the HTTPS address of your WordPress site.</p>',400);
   const index=await wordpressIndex(site); if(!index.ok||!index.data)return html(res,'<h1>WordPress not detected</h1><p>WPGo could not read the WordPress REST API at that address.</p>',400);
   const routes=index.data.routes||{};
-  const hasWpgo=Object.keys(routes).some(k=>k.startsWith('/wpgo/v1')) || Object.keys(routes).some(k=>k.startsWith('/wp-abilities/v1'));
+  const hasWpgo=Object.keys(routes).some(k=>k.startsWith('/wpgo/v1'));
   if(!hasWpgo)return html(res,'<h1>WPGo not detected</h1><p>Install and activate WPGo on this WordPress site, then try again.</p>',400);
-  const authEndpoint=index.data?.authentication?.['application-passwords']?.endpoints?.authorization || new URL('wp-admin/authorize-application.php',site).toString();
+  const authEndpoint=index.data?.authentication?.['application-passwords']?.endpoints?.authorization;
+  if(!authEndpoint)return html(res,'<h1>WordPress authorization unavailable</h1><p>This site does not currently expose the secure WordPress application authorization flow required by WPGo.</p>',400);
   const appId=crypto.randomUUID();
   const nextFlow=seal('wpgoflow1',{...flow,site,app_id:appId,exp:Math.floor(Date.now()/1000)+600});
   const success=new URL('/oauth/wp/callback',baseUrl(req)); success.searchParams.set('flow',nextFlow);
@@ -253,15 +250,15 @@ app.get('/oauth/wp/callback',async(req,res)=>{
   try { const abilities=await fetchAbilities(auth); if(!abilities.length)throw new Error('No WPGo abilities found.'); }
   catch { return res.redirect(302,oauthErrorRedirect(flow.redirect_uri,'access_denied','WPGo could not verify the WordPress connection.',flow.state)); }
   const code=crypto.randomBytes(32).toString('base64url');
-  authCodes.set(code,{...flow,username,password,expiresAt:Date.now()+300000});
+  await authCodes.put(code,{...flow,username,password,expiresAt:Date.now()+300000});
   res.set('Cache-Control','no-store');
   res.redirect(302,appendCode(flow.redirect_uri,code,flow.state));
 });
-app.post('/oauth/token',(req,res)=>{
+app.post('/oauth/token',async(req,res)=>{
   const grant=String(req.body?.grant_type||''),clientId=String(req.body?.client_id||'');
   if(grant==='authorization_code'){
     const code=String(req.body?.code||''),verifier=String(req.body?.code_verifier||''),redirectUri=String(req.body?.redirect_uri||'');
-    const row=authCodes.get(code); authCodes.delete(code);
+    const row=await authCodes.take(code);
     if(!row||row.expiresAt<Date.now()||row.client_id!==clientId||row.redirect_uri!==redirectUri)return res.status(400).json({error:'invalid_grant'});
     const expected=crypto.createHash('sha256').update(verifier).digest('base64url'); if(!verifier||expected!==row.code_challenge)return res.status(400).json({error:'invalid_grant'});
     const now=Math.floor(Date.now()/1000),base={client_id:clientId,site_url:row.site,username:row.username,password:row.password,resource:row.resource,scopes:['mcp']};
