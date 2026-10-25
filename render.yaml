@@ -17,6 +17,13 @@ services:
       - key: PORT
         value: "10000"
 
+  - type: keyvalue
+    name: wpgo-mcp-state
+    region: frankfurt
+    plan: free
+    maxmemoryPolicy: noeviction
+    persistenceMode: off
+
   - type: web
     name: wpgo-mcp-ga
     runtime: node
@@ -30,6 +37,11 @@ services:
         generateValue: true
       - key: WPGO_MCP_PUBLIC_BASE
         value: "https://wpgo-mcp-ga.onrender.com"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: wpgo-mcp-state
+          property: connectionString
 
   - type: web
     name: wpgo-control-plane-ga
