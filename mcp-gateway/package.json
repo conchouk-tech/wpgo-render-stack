@@ -1,16 +1,17 @@
 {
   "name": "wpgo-mcp-gateway",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "engines": {"node": ">=22"},
   "scripts": {
     "start": "node start.js",
-    "check": "node --check server.js && node --check start.js"
+    "check": "node --check server.js && node --check start.js && node --check state-store.js"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "redis": "^5.8.0"
   }
 }
