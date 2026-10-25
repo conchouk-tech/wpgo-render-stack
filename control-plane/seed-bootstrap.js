@@ -11,4 +11,7 @@ if (!process.env.WPGO_SIGNING_PRIVATE_KEY_PEM && process.env.WPGO_SIGNING_SEED) 
   process.env.WPGO_SIGNING_PRIVATE_KEY_PEM = privateKeyPemFromSeed(process.env.WPGO_SIGNING_SEED);
 }
 
+const founderGuard = await import('./founder-license-guard.js');
+founderGuard.installFounderLicenseGuard();
 await import('./server.js');
+founderGuard.restoreFounderLicenseGuard();
