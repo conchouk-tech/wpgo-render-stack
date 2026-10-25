@@ -1,4 +1,5 @@
 import pg from 'pg';
+import './runtime-readiness.js';
 
 const { Pool } = pg;
 const databaseUrl = process.env.DATABASE_URL || '';
