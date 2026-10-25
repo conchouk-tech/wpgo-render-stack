@@ -8,7 +8,7 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '64kb' }));
 
-const VERSION = '4.2.2';
+const VERSION = '4.2.3';
 const port = Number(process.env.PORT || 8090);
 const adminToken = process.env.WPGO_CONTROL_ADMIN_TOKEN || '';
 const signingKeyPath = process.env.WPGO_SIGNING_KEY_PATH || '';
@@ -159,7 +159,10 @@ function activeStatus(record, requestedSite = '') {
   if (record.expires_gmt && Date.parse(record.expires_gmt) < Date.now()) return 'expired';
   const allowed = normalizeHosts(record.site_hosts);
   const host = siteHost(requestedSite);
-  if (allowed.length && !allowed.includes('*') && host && !allowed.includes(host)) return 'site_mismatch';
+  if (allowed.length && !allowed.includes('*')) {
+    if (!host) return 'site_required';
+    if (!allowed.includes(host)) return 'site_mismatch';
+  }
   return 'active';
 }
 
@@ -179,6 +182,7 @@ app.get('/health', (_req,res) => res.json({
   persistent_store:Boolean(storePath),
   stateless_signed_licenses:Boolean(privateKeyPem),
   revocation_denylist:true,
+  strict_site_binding:true,
   release_hash:Boolean(release.sha256)
 }));
 app.get('/v1/capabilities', (_req,res) => res.json(sign({
@@ -186,6 +190,7 @@ app.get('/v1/capabilities', (_req,res) => res.json(sign({
   signing:privateKeyPem?'ed25519':'disabled',
   license_modes:[...(storePath?['persistent-store']:[]), ...(privateKeyPem?['signed-token']:[])],
   site_binding:true,
+  strict_site_binding:true,
   revocation_denylist:true,
   signed_updates:true,
   package_hash_verification:true
@@ -207,7 +212,7 @@ app.post('/v1/license/validate', (req,res) => {
     checked_gmt:new Date().toISOString()
   };
   audit('license_validate',{ key_ref:keyRef(key), license_id:record?.license_id || '', source, status, site_host:siteHost(site) });
-  res.status(status==='invalid'?403:200).json(sign(payload));
+  res.status(status==='active'?200:403).json(sign(payload));
 });
 app.get('/v1/update/manifest', (req,res) => {
   const key=bearer(req);
