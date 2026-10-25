@@ -1,7 +1,7 @@
 {
   "name": "wpgo-commercial-portal",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.6.1-rc.1",
   "type": "module",
   "engines": {"node": ">=22"},
   "scripts": {
@@ -9,6 +9,6 @@
     "check": "node --check app6.js"
   },
   "dependencies": {
-    "express": "4.21.2"
+    "express": "4.22.3"
   }
 }
