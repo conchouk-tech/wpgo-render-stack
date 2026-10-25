@@ -9,11 +9,27 @@ services:
       - key: WPGO_RENDER_TOKEN
         generateValue: true
       - key: WPGO_RENDER_ALLOWED_HOSTS
-        value: "wpgo.vivaforte.es"
+        value: ""
+      - key: WPGO_RENDER_ALLOW_ANY_PUBLIC
+        value: "1"
       - key: WPGO_RENDER_MAX_CONCURRENCY
         value: "1"
       - key: PORT
         value: "10000"
+
+  - type: web
+    name: wpgo-mcp-ga
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: cd mcp-gateway && npm install
+    startCommand: cd mcp-gateway && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: WPGO_MCP_SECRET
+        generateValue: true
+      - key: WPGO_MCP_PUBLIC_BASE
+        value: "https://wpgo-mcp-ga.onrender.com"
 
   - type: web
     name: wpgo-control-plane-ga
@@ -32,7 +48,7 @@ services:
       - key: WPGO_REVOKED_LICENSE_IDS
         value: ""
       - key: WPGO_RELEASE_VERSION
-        value: "4.2.2"
+        value: "4.4.5"
       - key: WPGO_RELEASE_PACKAGE
         value: ""
       - key: WPGO_RELEASE_SHA256
@@ -64,3 +80,20 @@ services:
         fromDatabase:
           name: wpgo-commercial-db
           property: connectionString
+      - key: WPGO_SESSION_SECRET
+        generateValue: true
+      - key: WPGO_DEV_AUTH
+        value: "0"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: WPGO_LOGIN_FROM_EMAIL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+
+databases:
+  - name: wpgo-commercial-db
+    plan: free
+    region: frankfurt
