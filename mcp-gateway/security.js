@@ -31,8 +31,8 @@ export function safeHttpsUrl(value, { allowLoopbackHttp = false } = {}) {
 }
 
 export function normalizeSite(value) {
-  const url = safeHttpsUrl(value);
-  if (!url) return '';
+  const url = parseUrl(value);
+  if (!url || url.protocol !== 'https:' || url.username || url.password) return '';
   url.search = '';
   url.hash = '';
   url.pathname = `${url.pathname.replace(/\/+$/, '')}/`;
