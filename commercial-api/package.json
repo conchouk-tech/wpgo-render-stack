@@ -1,12 +1,16 @@
 {
   "name": "wpgo-commercial-api",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.4.0",
   "type": "module",
-  "scripts": {"start": "node bootstrap.js"},
+  "engines": {"node": ">=22"},
+  "scripts": {
+    "start": "node bootstrap.js",
+    "check": "node --check bootstrap.js && node --check runtime-readiness.js && node --check server-v3.js"
+  },
   "dependencies": {
-    "express": "^5.0.0",
-    "pg": "^8.13.1",
-    "stripe": "^18.5.0"
+    "express": "5.1.0",
+    "pg": "8.13.1",
+    "stripe": "18.5.0"
   }
 }
