@@ -33,6 +33,10 @@ services:
     startCommand: cd mcp-gateway && npm start
     healthCheckPath: /health
     envVars:
+      - key: NODE_ENV
+        value: "production"
+      - key: WPGO_REQUIRE_SHARED_OAUTH_STATE
+        value: "1"
       - key: WPGO_MCP_SECRET
         generateValue: true
       - key: WPGO_MCP_PUBLIC_BASE
@@ -88,6 +92,8 @@ services:
     startCommand: cd commercial-api && npm start
     healthCheckPath: /health
     envVars:
+      - key: NODE_ENV
+        value: "production"
       - key: DATABASE_URL
         fromDatabase:
           name: wpgo-commercial-db
