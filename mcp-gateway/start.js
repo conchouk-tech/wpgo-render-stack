@@ -1,6 +1,46 @@
 import crypto from 'node:crypto';
 import './outbound-guard.js';
-import './server-v3.js';
+
+const nativeFetch = globalThis.fetch;
+globalThis.fetch = async (input, options = {}) => {
+  let url = '';
+  try {
+    url = typeof input === 'string' ? input : input?.url || String(input || '');
+  } catch {}
+  let wordpressProbe = false;
+  try {
+    wordpressProbe = new URL(url).pathname.includes('/wp-json/');
+  } catch {}
+  const started = Date.now();
+  if (wordpressProbe) {
+    console.log(JSON.stringify({ event: 'wordpress_probe_started', target: url }));
+  }
+  try {
+    const response = await nativeFetch(input, options);
+    if (wordpressProbe) {
+      console.log(JSON.stringify({
+        event: 'wordpress_probe_finished',
+        target: url,
+        status: response.status,
+        location: response.headers.get('location') || '',
+        duration_ms: Date.now() - started
+      }));
+    }
+    return response;
+  } catch (error) {
+    if (wordpressProbe) {
+      console.error(JSON.stringify({
+        event: 'wordpress_probe_failed',
+        target: url,
+        error: String(error?.message || error).slice(0, 300),
+        duration_ms: Date.now() - started
+      }));
+    }
+    throw error;
+  }
+};
+
+await import('./server-v3.js');
 
 const port = Number(process.env.PORT || 8095);
 const local = `http://127.0.0.1:${port}`;
