@@ -17,7 +17,7 @@ async function promoteFounderSites() {
     ssl: databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false }
   });
   try {
-    await pool.query(
+    const promoted = await pool.query(
       `UPDATE wpgo_accounts a
        SET is_founder = TRUE, plan = 'founder', updated_at = NOW()
        WHERE EXISTS (
@@ -32,6 +32,17 @@ async function promoteFounderSites() {
        )`,
       [founderSiteHosts]
     );
+    const usageHosts = await pool.query(
+      `SELECT COALESCE(NULLIF(LOWER(site_host),''),'[blank]') AS host, COUNT(*)::int AS events
+       FROM wpgo_usage_events
+       WHERE created_at > NOW()-INTERVAL '24 hours'
+       GROUP BY 1 ORDER BY events DESC LIMIT 20`
+    );
+    const registeredHosts = await pool.query(
+      `SELECT LOWER(site_host) AS host, COUNT(*)::int AS sites
+       FROM wpgo_sites GROUP BY 1 ORDER BY sites DESC LIMIT 20`
+    );
+    console.log(JSON.stringify({event:'founder_bootstrap',promoted:promoted.rowCount,founderSiteHosts,usageHosts:usageHosts.rows,registeredHosts:registeredHosts.rows}));
   } finally {
     await pool.end();
   }
