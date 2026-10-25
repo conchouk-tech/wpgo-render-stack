@@ -70,7 +70,7 @@ Checks:
 - [ ] Existing newer compatible version is not downgraded.
 - [ ] HTTPS is required for production remote AI connection.
 
-## 5. Accounts and authentication
+## 5. Accounts, portal and authentication
 
 - [ ] **BLOCKER:** Production email delivery is configured and a real six-digit sign-in code arrives.
 - [ ] Development code logging is disabled in production.
@@ -78,17 +78,27 @@ Checks:
 - [ ] Five incorrect attempts invalidate the active code.
 - [ ] Per-IP and per-email throttling returns 429 without growing memory indefinitely.
 - [ ] Session secret is at least 32 characters and unique to production.
-- [ ] Session cookie is Secure, HttpOnly and SameSite=Lax.
+- [ ] Portal CSRF secret is at least 32 characters and unique to production.
+- [ ] Session cookie uses the `__Host-` prefix and is Secure, HttpOnly and SameSite=Lax.
+- [ ] Existing legacy session cookie is cleared after successful sign-in.
 - [ ] Logout invalidates the browser cookie.
+- [ ] **BLOCKER:** Pairing a WordPress site requires explicit confirmation of the exact hostname; no state-changing GET or automatic form submission remains.
+- [ ] All authenticated portal POST actions reject a missing/invalid CSRF token.
+- [ ] Stripe redirects are accepted only for HTTPS Stripe hosts.
+- [ ] Portal-to-API requests have a bounded timeout and fail cleanly.
 
 ## 6. Site registration and licences
 
 - [ ] **BLOCKER:** Every customer licence is site-bound; an empty host list cannot create a usable commercial licence.
+- [ ] `WPGO_ALLOW_UNBOUND_LICENSES=0` in production.
 - [ ] Manual licence issuance accepts only sites registered to the signed-in account.
 - [ ] Licence refresh succeeds only for a site still registered to that account.
 - [ ] Licence for Site A is rejected when presented as Site B.
 - [ ] `www.example.com` and `example.com` migrate/normalize without creating duplicate site records.
 - [ ] Revoked/suspended/expired licences fail closed.
+- [ ] **BLOCKER:** Revoking a signed licence writes persistent state to Postgres and takes effect without a deploy.
+- [ ] Unrevoking a licence removes only the database revocation; emergency/static deny-list entries remain authoritative.
+- [ ] Control-plane restart does not lose licence revocations.
 - [ ] A control-plane outage does not remotely disable the installed local WPGo runtime.
 
 ## 7. Usage metering
@@ -122,6 +132,7 @@ Checks:
 - [ ] Subresource URLs are checked for public-network eligibility.
 - [ ] Legacy renderer token remains limited to explicitly configured internal hosts unless an operator deliberately enables its public compatibility mode.
 - [ ] Renderer concurrency and 429 behavior are load-tested at the production plan size.
+- [ ] Do not describe the Playwright route guard as full DNS-rebinding protection unless browser-level egress is separately pinned/enforced; current checks are URL/DNS validation plus private-address blocking.
 
 ## 10. Optional hosted MCP gateway
 
@@ -141,19 +152,24 @@ If offered as preview/compatibility:
 ## 11. Render production configuration
 
 - [ ] **BLOCKER:** `NODE_ENV=production` on GA services.
+- [ ] GA services are intentionally located in the selected production region; current target is Frankfurt.
 - [ ] Shared `WPGO_CONTROL_ADMIN_TOKEN` is strong and identical where required.
 - [ ] Control-plane signing seed/private key is present and backed up securely.
+- [ ] Control plane has `DATABASE_URL` and can create/read the persistent revocation table.
+- [ ] `WPGO_ALLOW_UNBOUND_LICENSES=0`.
 - [ ] `WPGO_SESSION_SECRET` is present and unique.
+- [ ] `WPGO_PORTAL_CSRF_SECRET` is present and unique.
 - [ ] `WPGO_DEV_AUTH=0`.
 - [ ] `WPGO_REQUIRE_EMAIL=1` and real email settings are present.
 - [ ] `WPGO_REQUIRE_BILLING=1` and Stripe settings are present.
 - [ ] Renderer has no customer/test hostname hard-coded in its GA configuration.
 - [ ] Renderer no-token and HTTP escape hatches are disabled.
 - [ ] Release package URL/version/SHA are configured only after the final ZIP exists.
+- [ ] Docker images copy the same hardened server entrypoints that the package start scripts execute.
 
 ### Existing Blueprint warning
 
-Render values marked `sync: false` are operator-supplied secrets. For existing services, verify/set these values manually in Render before the first 4.5 deployment. Do not assume changing the Blueprint will populate them retroactively.
+Render values marked `sync: false` are operator-supplied secrets. For existing services, verify/set these values manually in Render before the first 4.5 deployment. Do not assume changing the Blueprint will populate them retroactively. Region changes for existing services may require a controlled migration/recreation rather than an in-place setting change; do not discover that during the GA cutover.
 
 ## 12. Security / abuse tests
 
@@ -165,14 +181,17 @@ Render values marked `sync: false` are operator-supplied secrets. For existing s
 - [ ] Secrets/tokens are never logged in normal production logs.
 - [ ] Security headers are present on portal/API/renderer responses.
 - [ ] Dependency/plugin download integrity is verified before installation.
+- [ ] Site-pairing links cannot silently register a site simply because an authenticated customer visits a URL.
 
 ## 13. Upgrade and rollback
 
 - [ ] Snapshot production database before rollout.
 - [ ] Export current Render environment configuration before rollout.
 - [ ] Record current `main` commit and deployed service deploy IDs.
+- [ ] Review any required Frankfurt migration/recreation for existing control-plane/renderer services before changing production.
 - [ ] Deploy control plane first, then commercial API/portal, then renderer, then the WordPress plugin release.
 - [ ] Smoke-test health and one real end-to-end connection after every stage.
+- [ ] Verify a licence revoke/unrevoke cycle after the control-plane database migration.
 - [ ] Rollback instructions are tested: previous image/commit, previous plugin ZIP and database recovery if a migration must be reversed.
 - [ ] Site-host normalization migration is reviewed against a production database snapshot before rollout.
 
@@ -186,6 +205,7 @@ A GA release is **GO** only when:
 - [ ] the complete WordPress plugin ZIP has been tested on clean install + upgrade;
 - [ ] ChatGPT + Claude + generic MCP client tests pass;
 - [ ] email + Stripe + licence + renderer production smoke tests pass;
+- [ ] persistent licence revocation has been tested across a control-plane restart;
 - [ ] final plugin package SHA-256 matches the signed update manifest;
 - [ ] rollback material is available.
 
