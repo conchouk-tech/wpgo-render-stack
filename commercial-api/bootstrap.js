@@ -2,10 +2,13 @@ import pg from 'pg';
 
 const { Pool } = pg;
 const databaseUrl = process.env.DATABASE_URL || '';
-const founderSiteHosts = String(process.env.WPGO_FOUNDER_SITE_HOSTS || '')
+const configuredFounderHosts = String(process.env.WPGO_FOUNDER_SITE_HOSTS || '')
   .split(',')
   .map(v => v.trim().toLowerCase())
   .filter(Boolean);
+const founderSiteHosts = configuredFounderHosts.length
+  ? configuredFounderHosts
+  : ['ecozenia.vivaforte.es', 'wpgo.vivaforte.es'];
 
 async function promoteFounderSites() {
   if (!databaseUrl || !founderSiteHosts.length) return;
