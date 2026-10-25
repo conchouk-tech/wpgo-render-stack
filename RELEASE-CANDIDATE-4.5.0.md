@@ -29,6 +29,7 @@ The old universal `/mcp` endpoint remains available as a compatibility/fallback 
 - Guided connection page and site readiness diagnostics.
 - Warning when the configured WordPress administrator/recovery email looks like a placeholder `admin@site-domain` address, based on a real onboarding failure observed during RC testing.
 - Request IDs are surfaced for support diagnostics.
+- The temporary RC companion module is pinned to the isolated RC gateway rather than the production MCP service.
 
 ### Site-specific MCP URLs
 
@@ -66,6 +67,15 @@ The old universal `/mcp` endpoint remains available as a compatibility/fallback 
   - Application Password authorization unavailable.
 - Error screens include stable error codes and request IDs rather than silently appearing to do nothing.
 
+### Dependency and build security
+
+- Upgraded `@modelcontextprotocol/server` to `2.4.0` and `@modelcontextprotocol/node` to `2.1.2` after the RC security gate exposed high-severity issues in the earlier SDK line.
+- Upgraded the commercial portal to Express `4.22.3` after the dependency audit exposed a high-severity advisory in the older portal runtime.
+- Added a high/critical `npm audit` gate for MCP gateway, commercial API, portal, control plane, and renderer.
+- Added a WordPress static secret/debug-pattern gate.
+- Added and committed npm lockfiles so the tested transitive dependency graph is reproducible.
+- Production Blueprint and Docker builds use `npm ci`/lockfile-backed installs rather than unconstrained dependency resolution.
+
 ## Automated RC validation
 
 The RC workflow must pass all of the following before the branch is considered testable:
@@ -90,8 +100,9 @@ The RC workflow must pass all of the following before the branch is considered t
 - Control-plane signed licence issue/validation test.
 - Portal production-mode startup test.
 - Renderer release check.
+- High/critical dependency security audit across every Node service.
 
-The first RC workflow run passed all six jobs.
+The RC functional and dependency-security workflows pass after the MCP SDK and portal dependency upgrades.
 
 ## Component versions
 
@@ -99,9 +110,11 @@ The first RC workflow run passed all six jobs.
 | --- | --- |
 | WPGo product | `4.5.0-rc.1` |
 | MCP gateway | `1.4.0-rc.1` |
+| MCP server SDK | `2.4.0` |
+| MCP Node adapter | `2.1.2` |
 | WordPress Connect AI module | `4.5.0-rc.1` |
 | Commercial API | `1.4.0` |
-| Commercial portal | `1.6.0` (4.5 portal UX integration remains follow-up RC work) |
+| Commercial portal | `1.6.1-rc.1` |
 | Control plane | `4.3.0` |
 | Renderer | `4.3.0` |
 
@@ -111,13 +124,22 @@ GitHub Actions produces an installable WordPress companion artifact named:
 
 `wpgo-connect-ai-4.5.0-rc.1`
 
-This companion module is deliberately separable from the existing WPGo core during RC validation. It allows the new onboarding to be tested without replacing the current WPGo runtime. Before final 4.5 GA, this module should be folded into the main WordPress plugin distribution so customers install one WPGo plugin, not two.
+This companion module is deliberately separable from the existing WPGo core during RC validation. It allows the new onboarding to be tested without replacing the current WPGo runtime. The RC companion points to the isolated `https://wpgo-mcp-rc.onrender.com` gateway. Before final 4.5 GA, this module should be folded into the main WordPress plugin distribution so customers install one WPGo plugin, not two.
+
+## RC staging
+
+The dedicated staging gateway is:
+
+`https://wpgo-mcp-rc.onrender.com`
+
+It is pinned to the RC branch with auto-deploy disabled. Production services are unchanged. The staging service reports WPGo product `4.5.0-rc.1`, MCP gateway `1.4.0-rc.1`, a passing internal startup self-test, and a clean MCP dependency audit.
+
+The staging MCP secret is intentionally ephemeral for isolated testing. Site-specific staging URLs should be regenerated after a staging service restart. Production will use a persistent managed secret.
 
 ## Remaining release-candidate validation
 
 Before promoting 4.5 to general availability:
 
-- Deploy the RC gateway to an isolated staging endpoint.
 - Test the new site-specific connection URL with Claude using published identity/CIMD.
 - Test at least one second independent MCP client.
 - Install the RC WordPress companion on a disposable/test WordPress site and validate the WordPress-first UX in a real browser.
