@@ -55,10 +55,14 @@ services:
     dockerContext: ./control-plane
     healthCheckPath: /health
     envVars:
+      - key: NODE_ENV
+        value: "production"
       - key: WPGO_CONTROL_ADMIN_TOKEN
-        generateValue: true
+        sync: false
       - key: WPGO_SIGNING_SEED
         generateValue: true
+      - key: WPGO_ALLOW_UNBOUND_LICENSES
+        value: "0"
       - key: WPGO_LICENSES_JSON
         value: "{}"
       - key: WPGO_REVOKED_LICENSE_IDS
@@ -100,6 +104,8 @@ services:
           property: connectionString
       - key: WPGO_SESSION_SECRET
         generateValue: true
+      - key: WPGO_CONTROL_ADMIN_TOKEN
+        sync: false
       - key: WPGO_DEV_AUTH
         value: "0"
       - key: RESEND_API_KEY
