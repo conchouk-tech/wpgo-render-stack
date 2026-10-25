@@ -9,7 +9,7 @@ globalThis.fetch = async (input, options = {}) => {
   } catch {}
   let wordpressProbe = false;
   try {
-    wordpressProbe = new URL(url).pathname.includes('/wp-json/');
+    wordpressProbe = new URL(url).pathname.endsWith('/wp-json/') || new URL(url).pathname === '/wp-json';
   } catch {}
   const started = Date.now();
   if (wordpressProbe) {
@@ -18,12 +18,30 @@ globalThis.fetch = async (input, options = {}) => {
   try {
     const response = await nativeFetch(input, options);
     if (wordpressProbe) {
+      let capabilitySummary = {};
+      try {
+        const data = await response.clone().json();
+        const routeNames = Object.keys(data?.routes || {});
+        const authEndpoint = data?.authentication?.['application-passwords']?.endpoints?.authorization || '';
+        capabilitySummary = {
+          route_count: routeNames.length,
+          has_wpgo: routeNames.some(route => route.startsWith('/wpgo/v1')),
+          has_approval_proxy: routeNames.some(route => route.includes('/wpgo/v1/abilities/run')),
+          has_application_password_auth: Boolean(authEndpoint),
+          application_password_auth_origin: (() => {
+            try { return authEndpoint ? new URL(authEndpoint).origin : ''; } catch { return 'invalid'; }
+          })()
+        };
+      } catch (error) {
+        capabilitySummary = { parse_error: String(error?.message || error).slice(0, 160) };
+      }
       console.log(JSON.stringify({
         event: 'wordpress_probe_finished',
         target: url,
         status: response.status,
         location: response.headers.get('location') || '',
-        duration_ms: Date.now() - started
+        duration_ms: Date.now() - started,
+        ...capabilitySummary
       }));
     }
     return response;
