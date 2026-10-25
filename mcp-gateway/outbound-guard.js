@@ -14,8 +14,25 @@ const blocked = new net.BlockList();
   ['2001:20::',28],['fc00::',7],['fe80::',10],['ff00::',8]
 ].forEach(([ip,prefix])=>blocked.addSubnet(ip,prefix,'ipv6'));
 
+const explicitTestPorts = new Set(
+  process.env.NODE_ENV === 'test'
+    ? String(process.env.WPGO_TEST_ALLOW_LOOPBACK_PORTS || '')
+        .split(',')
+        .map(value => Number(value.trim()))
+        .filter(value => Number.isInteger(value) && value > 0 && value <= 65535)
+    : []
+);
+
+function loopbackHost(hostname){
+  return ['127.0.0.1','localhost','[::1]','::1'].includes(String(hostname||'').toLowerCase());
+}
 function localSelfTest(u){
-  return ['127.0.0.1','localhost','[::1]'].includes(u.hostname) && Number(u.port || (u.protocol==='https:'?443:80)) === port;
+  return loopbackHost(u.hostname) && Number(u.port || (u.protocol==='https:'?443:80)) === port;
+}
+function explicitRcTestTarget(u){
+  if(process.env.NODE_ENV !== 'test' || !loopbackHost(u.hostname))return false;
+  const targetPort=Number(u.port || (u.protocol==='https:'?443:80));
+  return u.protocol==='https:' && explicitTestPorts.has(targetPort);
 }
 function mappedIpv4(address){
   const a=String(address||'').toLowerCase();
@@ -28,7 +45,7 @@ function mappedIpv4(address){
 }
 async function assertPublicTarget(value){
   const u = new URL(typeof value === 'string' || value instanceof URL ? String(value) : String(value?.url || ''));
-  if(localSelfTest(u))return;
+  if(localSelfTest(u) || explicitRcTestTarget(u))return;
   if(!['https:'].includes(u.protocol))throw new Error('WPGo outbound requests require HTTPS.');
   const records = await dns.lookup(u.hostname,{all:true,verbatim:true});
   if(!records.length)throw new Error('WPGo could not resolve the remote host.');
