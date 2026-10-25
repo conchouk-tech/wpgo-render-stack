@@ -53,6 +53,8 @@ services:
         generateValue: true
       - key: WPGO_ALLOW_UNBOUND_LICENSES
         value: "0"
+      - key: WPGO_REQUIRE_ACCOUNT_ENTITLEMENT
+        value: "1"
       - key: WPGO_LICENSES_JSON
         value: "{}"
       - key: WPGO_REVOKED_LICENSE_IDS
