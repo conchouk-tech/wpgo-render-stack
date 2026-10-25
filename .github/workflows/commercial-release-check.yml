@@ -13,7 +13,7 @@ permissions:
 jobs:
   static-release-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -21,6 +21,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            commercial-api/package.json
+            control-plane/package.json
+            portal/package.json
+            renderer/package.json
+            mcp-gateway/package.json
+      - name: Resolve runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in commercial-api control-plane portal renderer mcp-gateway; do
+            echo "Resolving $dir dependencies"
+            npm install --prefix "$dir" --ignore-scripts --package-lock=false --no-audit --no-fund
+            npm ls --prefix "$dir" --depth=0
+          done
       - name: Verify PHP CLI
         run: php -v
       - name: Run WPGo release checks
