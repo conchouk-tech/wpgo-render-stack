@@ -1,5 +1,21 @@
 import crypto from 'node:crypto';
+import express from 'express';
 import './outbound-guard.js';
+
+const originalSet = express.response.set;
+express.response.set = function patchedSet(field, value) {
+  if (typeof field === 'object' && field !== null) {
+    const next = { ...field };
+    if (typeof next['Content-Security-Policy'] === 'string') {
+      next['Content-Security-Policy'] = next['Content-Security-Policy'].replace("form-action 'self'", "form-action 'self' https:");
+    }
+    return originalSet.call(this, next);
+  }
+  if (String(field).toLowerCase() === 'content-security-policy' && typeof value === 'string') {
+    value = value.replace("form-action 'self'", "form-action 'self' https:");
+  }
+  return originalSet.call(this, field, value);
+};
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, options = {}) => {
@@ -30,6 +46,9 @@ globalThis.fetch = async (input, options = {}) => {
           has_application_password_auth: Boolean(authEndpoint),
           application_password_auth_origin: (() => {
             try { return authEndpoint ? new URL(authEndpoint).origin : ''; } catch { return 'invalid'; }
+          })(),
+          application_password_auth_path: (() => {
+            try { return authEndpoint ? new URL(authEndpoint).pathname : ''; } catch { return 'invalid'; }
           })()
         };
       } catch (error) {
