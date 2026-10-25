@@ -70,7 +70,8 @@ renderer_block="$(awk '/name: wpgo-renderer-ga/{f=1} /name: wpgo-control-plane-g
 grep -q 'region: frankfurt' <<<"$renderer_block" || fail "renderer is not targeted to Frankfurt"
 pass "Production blueprint guardrails"
 
-grep -q "provider_neutral:true" commercial-api/server-v4.js || fail "commercial API does not advertise provider-neutral MCP"
+grep -q "provider_neutral_mcp:true" commercial-api/server-v4.js || fail "commercial API does not advertise provider-neutral MCP"
+grep -q "vendor_neutral:true" commercial-api/server-v4.js || fail "commercial API connection manifest is not vendor-neutral"
 grep -q "provider_neutral_mcp:true" portal/app6.js || fail "portal does not advertise provider-neutral MCP"
 grep -q "provider_neutral' => true" wpgo-plugin-patches/4.5.0/class-wpgo-ai-connector.php || fail "plugin connector is not provider-neutral"
 grep -q "'agent-connector-for-wp' === \$ns" wpgo-plugin-patches/4.5.0/class-wpgo-ai-connector.php || fail "Agent Connector namespace is not explicitly hidden"
