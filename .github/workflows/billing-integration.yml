@@ -9,9 +9,37 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  finalize-rc3:
+    if: github.ref_name == 'release/wpgo-4.5.0-rc3' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/wpgo-4.5.0-rc3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Finalize RC3 source
+        run: python3 scripts/finalize-rc3.py
+      - name: Refresh affected lockfiles
+        run: |
+          (cd mcp-gateway && npm install --package-lock-only --ignore-scripts)
+          (cd renderer && npm install --package-lock-only --ignore-scripts)
+      - name: Commit finalized source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mcp-gateway/server-rc.js mcp-gateway/package-lock.json renderer/server.js renderer/package.json renderer/package-lock.json wordpress-plugin/includes/class-wpgo-connect-ai.php wordpress-plugin/includes/class-wpgo-agent-experience.php .github/workflows/commercial-hardening.yml
+          if git diff --cached --quiet; then
+            echo 'RC3 source already finalized.'
+            exit 0
+          fi
+          git commit -m 'Finalize WPGo 4.5 RC3 source'
+          git push origin HEAD:release/wpgo-4.5.0-rc3
+
   stripe-webhook-lifecycle:
     runs-on: ubuntu-latest
     services:
