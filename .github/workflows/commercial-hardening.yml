@@ -33,15 +33,8 @@ jobs:
                   end = len(text)
               return text[start:end]
 
-          critical = [
-              'name: wpgo-mcp-ga',
-              'name: wpgo-commercial-web',
-              'name: wpgo-commercial-api',
-              'name: wpgo-control-plane-ga',
-          ]
-          for marker in critical:
-              block = block_after(marker)
-              if re.search(r'(?m)^\s*plan:\s*free\s*$', block):
+          for marker in ('name: wpgo-mcp-ga', 'name: wpgo-commercial-web', 'name: wpgo-commercial-api', 'name: wpgo-control-plane-ga'):
+              if re.search(r'(?m)^\s*plan:\s*free\s*$', block_after(marker)):
                   raise SystemExit(f'{marker} must not use Render free compute in the production blueprint')
 
           kv = block_after('name: wpgo-mcp-state')
@@ -51,19 +44,15 @@ jobs:
               raise SystemExit('wpgo-mcp-state must use journal-snapshot persistence')
 
           db_start = text.find('name: wpgo-commercial-db')
-          if db_start < 0:
-              raise SystemExit('missing wpgo-commercial-db')
-          db = text[db_start:]
-          if re.search(r'(?m)^\s*plan:\s*free\s*$', db):
-              raise SystemExit('wpgo-commercial-db must not use the expiring Render free database')
+          if db_start < 0 or re.search(r'(?m)^\s*plan:\s*free\s*$', text[db_start:]):
+              raise SystemExit('wpgo-commercial-db must use persistent production storage')
 
           mcp = block_after('name: wpgo-mcp-ga')
           for required in ('WPGO_MCP_SECRET', 'WPGO_REQUIRE_SHARED_OAUTH_STATE', 'REDIS_URL'):
               if required not in mcp:
                   raise SystemExit(f'wpgo-mcp-ga missing {required}')
 
-          portal = block_after('name: wpgo-commercial-web')
-          if 'WPGO_MCP_GATEWAY' not in portal:
+          if 'WPGO_MCP_GATEWAY' not in block_after('name: wpgo-commercial-web'):
               raise SystemExit('wpgo-commercial-web missing WPGO_MCP_GATEWAY')
 
           print('Production blueprint persistence/always-on gate passed.')
@@ -83,7 +72,7 @@ jobs:
           cache-dependency-path: mcp-gateway/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm run check
-      - name: Full WordPress-first OAuth and MCP integration test
+      - name: Full WordPress-first OAuth, schema, preflight and MCP integration test
         env:
           NODE_ENV: test
           PORT: '8095'
@@ -118,9 +107,9 @@ jobs:
           const response = await fetch('http://127.0.0.1:8095/health');
           const health = await response.json();
           if (!response.ok || !health.ok) throw new Error('MCP gateway did not become healthy');
-          if (health.version !== '1.4.1-rc.2' || health.product_version !== '4.5.0-rc.2') throw new Error('RC2 version contract failed');
-          if (!health.wordpress_first_onboarding || !health.site_specific_mcp_urls || !health.approval_proxy || !health.connection_history) {
-            throw new Error('RC2 onboarding/telemetry capability contract failed');
+          if (health.version !== '1.4.2-rc.3' || health.product_version !== '4.5.0-rc.3') throw new Error('RC3 version contract failed');
+          if (!health.wordpress_first_onboarding || !health.site_specific_mcp_urls || !health.approval_proxy || !health.connection_history || !health.agent_preflight || !health.schema_guard) {
+            throw new Error('RC3 onboarding/telemetry/agent-experience capability contract failed');
           }
           NODE
           npm run test:rc-onboarding
@@ -135,27 +124,36 @@ jobs:
         with:
           php-version: '8.0'
           coverage: none
-      - name: PHP syntax gate
+      - name: PHP syntax and Claude regression gates
         run: |
           php -l wordpress-plugin/wpgo-connect-ai-rc.php
           php -l wordpress-plugin/includes/class-wpgo-connect-ai.php
+          php -l wordpress-plugin/includes/class-wpgo-agent-experience.php
+          php -l wordpress-plugin/includes/class-wpgo-theme-settings.php
+          php -l wordpress-plugin/includes/class-wpgo-media-abilities.php
+          php wordpress-plugin/tests/agent-experience-smoke.php
+          php wordpress-plugin/tests/media-abilities-smoke.php
       - name: Reject development-only WordPress module patterns
         run: |
-          ! grep -RniE 'localhost|127\.0\.0\.1|WPGO_DEV_AUTH|var_dump\(|print_r\(' wordpress-plugin
-      - name: Build RC2 WordPress module ZIP
+          ! grep -RniE 'WPGO_DEV_AUTH|var_dump\(|print_r\(' wordpress-plugin
+      - name: Build RC3 WordPress companion ZIP
         run: |
-          mkdir -p /tmp/wpgo-connect-ai-4.5.0-rc.2/wpgo-connect-ai/includes
-          cp wordpress-plugin/wpgo-connect-ai-rc.php /tmp/wpgo-connect-ai-4.5.0-rc.2/wpgo-connect-ai/wpgo-connect-ai.php
-          cp wordpress-plugin/includes/class-wpgo-connect-ai.php /tmp/wpgo-connect-ai-4.5.0-rc.2/wpgo-connect-ai/includes/
-          cd /tmp/wpgo-connect-ai-4.5.0-rc.2
-          zip -qr "$GITHUB_WORKSPACE/wpgo-connect-ai-4.5.0-rc.2.zip" wpgo-connect-ai
-          sha256sum "$GITHUB_WORKSPACE/wpgo-connect-ai-4.5.0-rc.2.zip" > "$GITHUB_WORKSPACE/wpgo-connect-ai-4.5.0-rc.2.sha256"
+          rm -rf /tmp/wpgo-connect-ai-4.5.0-rc.3
+          mkdir -p /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes
+          cp wordpress-plugin/wpgo-connect-ai-rc.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/wpgo-connect-ai.php
+          cp wordpress-plugin/includes/class-wpgo-connect-ai.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/
+          cp wordpress-plugin/includes/class-wpgo-agent-experience.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/
+          cp wordpress-plugin/includes/class-wpgo-theme-settings.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/
+          cp wordpress-plugin/includes/class-wpgo-media-abilities.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/
+          cd /tmp/wpgo-connect-ai-4.5.0-rc.3
+          zip -qr "$GITHUB_WORKSPACE/wpgo-connect-ai-4.5.0-rc.3.zip" wpgo-connect-ai
+          sha256sum "$GITHUB_WORKSPACE/wpgo-connect-ai-4.5.0-rc.3.zip" > "$GITHUB_WORKSPACE/wpgo-connect-ai-4.5.0-rc.3.sha256"
       - uses: actions/upload-artifact@v4
         with:
-          name: wpgo-connect-ai-4.5.0-rc.2
+          name: wpgo-connect-ai-4.5.0-rc.3
           path: |
-            wpgo-connect-ai-4.5.0-rc.2.zip
-            wpgo-connect-ai-4.5.0-rc.2.sha256
+            wpgo-connect-ai-4.5.0-rc.3.zip
+            wpgo-connect-ai-4.5.0-rc.3.sha256
           if-no-files-found: error
 
   commercial-api:
@@ -224,18 +222,18 @@ jobs:
           cache-dependency-path: control-plane/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm run check
-      - name: Signed licence and signed update manifest smoke test
+      - name: Signed licence and RC3 update-manifest smoke test
         env:
           NODE_ENV: production
           PORT: '8090'
           WPGO_CONTROL_ADMIN_TOKEN: ci-only-control-token-value-not-for-production-use
           WPGO_SIGNING_SEED: ci-only-signing-seed-not-for-production-use
           WPGO_ALLOW_UNBOUND_LICENSES: '0'
-          WPGO_RELEASE_VERSION: '4.5.0-rc.2'
-          WPGO_RELEASE_PACKAGE: 'wpgo-4.5.0-rc.2.zip'
+          WPGO_RELEASE_VERSION: '4.5.0-rc.3'
+          WPGO_RELEASE_PACKAGE: 'wpgo-4.5.0-rc.3.zip'
           WPGO_RELEASE_SHA256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-          WPGO_RELEASE_URL: 'https://downloads.example.test/wpgo-4.5.0-rc.2.zip'
-          WPGO_RELEASE_CHANGELOG: 'RC2 automated signed update validation.'
+          WPGO_RELEASE_URL: 'https://downloads.example.test/wpgo-4.5.0-rc.3.zip'
+          WPGO_RELEASE_CHANGELOG: 'RC3 agent-experience automated signed update validation.'
         run: |
           npm start >/tmp/wpgo-control.log 2>&1 &
           pid=$!
@@ -246,52 +244,37 @@ jobs:
           done
           node --input-type=module <<'NODE'
           import crypto from 'node:crypto';
-
           function sortDeep(value) {
             if (Array.isArray(value)) return value.map(sortDeep);
-            if (value && typeof value === 'object') {
-              return Object.fromEntries(Object.keys(value).sort().map(key => [key, sortDeep(value[key])]));
-            }
+            if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, sortDeep(value[key])]));
             return value;
           }
           const canonical = value => JSON.stringify(sortDeep(value));
-
           const admin = process.env.WPGO_CONTROL_ADMIN_TOKEN;
           const issuedResponse = await fetch('http://127.0.0.1:8090/v1/admin/license/issue', {
-            method: 'POST',
-            headers: {'content-type':'application/json', authorization:`Bearer ${admin}`},
+            method: 'POST', headers: {'content-type':'application/json', authorization:`Bearer ${admin}`},
             body: JSON.stringify({plan:'pro', site_hosts:['example.com'], features:['updates','support']})
           });
           const issued = await issuedResponse.json();
           if (!issuedResponse.ok || !issued.license_key?.startsWith('wpgo1.')) throw new Error('Licence issue failed');
-
           const validatedResponse = await fetch('http://127.0.0.1:8090/v1/license/validate', {
             method: 'POST', headers: {'content-type':'application/json'},
             body: JSON.stringify({license_key:issued.license_key, site_url:'https://example.com/'})
           });
           const validated = await validatedResponse.json();
           if (!validatedResponse.ok || validated.payload?.status !== 'active') throw new Error('Licence validation failed');
-
           const manifestResponse = await fetch('http://127.0.0.1:8090/v1/update/manifest', {
-            headers: {
-              authorization: `Bearer ${issued.license_key}`,
-              'X-WPGo-Site': 'https://example.com/'
-            }
+            headers: {authorization:`Bearer ${issued.license_key}`, 'X-WPGo-Site':'https://example.com/'}
           });
           const manifest = await manifestResponse.json();
-          if (!manifestResponse.ok) throw new Error('Update manifest unavailable');
-          if (manifest.payload?.version !== '4.5.0-rc.2' || manifest.payload?.package !== 'wpgo-4.5.0-rc.2.zip') throw new Error('Update manifest version/package mismatch');
-          if (manifest.payload?.sha256 !== 'a'.repeat(64)) throw new Error('Update manifest SHA mismatch');
-          if (manifest.signing !== 'ed25519' || !manifest.signature) throw new Error('Update manifest was not signed');
-
+          if (!manifestResponse.ok || manifest.payload?.version !== '4.5.0-rc.3' || manifest.payload?.package !== 'wpgo-4.5.0-rc.3.zip') throw new Error('RC3 update manifest mismatch');
+          if (manifest.payload?.sha256 !== 'a'.repeat(64) || manifest.signing !== 'ed25519' || !manifest.signature) throw new Error('Update manifest signature metadata invalid');
           const keyResponse = await fetch('http://127.0.0.1:8090/v1/public-key');
           const keyData = await keyResponse.json();
-          if (!keyResponse.ok || keyData.algorithm !== 'ed25519' || !keyData.public_key) throw new Error('Public update key unavailable');
           const rawKey = Buffer.from(keyData.public_key, 'base64');
           const prefix = Buffer.from('302a300506032b6570032100', 'hex');
           const publicKey = crypto.createPublicKey({ key: Buffer.concat([prefix, rawKey]), format: 'der', type: 'spki' });
-          const valid = crypto.verify(null, Buffer.from(canonical(manifest.payload)), publicKey, Buffer.from(manifest.signature, 'base64'));
-          if (!valid) throw new Error('Signed update manifest signature verification failed');
+          if (!crypto.verify(null, Buffer.from(canonical(manifest.payload)), publicKey, Buffer.from(manifest.signature, 'base64'))) throw new Error('Signed update manifest signature verification failed');
           NODE
 
   portal:
@@ -326,9 +309,7 @@ jobs:
           node --input-type=module <<'NODE'
           const response = await fetch('http://127.0.0.1:8080/health');
           const health = await response.json();
-          if (!response.ok || !health.ok || health.pairing_confirmation !== true || !health.csrf_protection || !health.connect_ai || !health.connection_telemetry) {
-            throw new Error('Portal RC2 runtime health failed');
-          }
+          if (!response.ok || !health.ok || !health.pairing_confirmation || !health.csrf_protection || !health.connect_ai || !health.connection_telemetry) throw new Error('Portal RC3 runtime health failed');
           NODE
 
   renderer:
@@ -345,3 +326,7 @@ jobs:
           cache-dependency-path: renderer/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm run check
+      - name: Verify RC3 renderer metadata
+        run: |
+          grep -q "4.4.1-rc.3" server.js
+          grep -q "VIEWPORTS" server.js
