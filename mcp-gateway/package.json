@@ -8,7 +8,7 @@
     "start": "node start.js",
     "test": "node --test security.test.js site-link.test.js",
     "test:rc-onboarding": "node rc-onboarding.e2e.js",
-    "check": "node --check server-rc.js && node --check start.js && node --check state-store.js && node --check security.js && node --check site-link.js && node --check mock-wordpress.js && node --check rc-onboarding.e2e.js && node --test security.test.js site-link.test.js"
+    "check": "node --check server-rc.js && node --check start.js && node --check state-store.js && node --check connection-store.js && node --check security.js && node --check site-link.js && node --check mock-wordpress.js && node --check rc-onboarding.e2e.js && node --test security.test.js site-link.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/node": "2.1.2",
