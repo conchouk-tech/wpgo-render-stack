@@ -32,7 +32,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add mcp-gateway/server-rc.js mcp-gateway/package-lock.json renderer/server.js renderer/package.json renderer/package-lock.json wordpress-plugin/includes/class-wpgo-connect-ai.php wordpress-plugin/includes/class-wpgo-agent-experience.php .github/workflows/commercial-hardening.yml
+          git add mcp-gateway/server-rc.js mcp-gateway/package-lock.json renderer/server.js renderer/package.json renderer/package-lock.json wordpress-plugin/includes/class-wpgo-connect-ai.php wordpress-plugin/includes/class-wpgo-agent-experience.php
           if git diff --cached --quiet; then
             echo 'RC3 source already finalized.'
             exit 0
