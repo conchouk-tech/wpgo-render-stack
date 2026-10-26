@@ -2,6 +2,9 @@
 // Standalone RC3 regression for the write-boundary normalization helper.
 define( 'ABSPATH', __DIR__ . '/' );
 
+function add_action() {}
+function add_filter() {}
+
 function wp_slash( $value ) {
 	if ( is_array( $value ) ) {
 		return array_map( 'wp_slash', $value );
