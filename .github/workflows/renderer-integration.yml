@@ -46,23 +46,33 @@ jobs:
           done
           cat /tmp/wpgo-renderer.log
           exit 1
-      - name: Audit a public HTTPS page
+      - name: Audit public HTTPS page at desktop tablet and mobile widths
         run: |
           node --input-type=module <<'NODE'
-          const response = await fetch('http://127.0.0.1:8082/v1/site-audit', {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              authorization: `Bearer ${process.env.WPGO_RENDER_TOKEN}`
-            },
-            body: JSON.stringify({ url: 'https://example.com/', wait_ms: 0, screenshot: false })
-          });
-          const body = await response.json();
-          if (!response.ok || !body.ok) throw new Error(`Site audit failed: ${JSON.stringify(body)}`);
-          if (!String(body.final_url || '').startsWith('https://example.com')) throw new Error('Unexpected final URL');
-          if (!String(body.title || '').toLowerCase().includes('example')) throw new Error('Rendered title missing');
-          if (!Array.isArray(body.headings) || !Number.isInteger(body.h1_count)) throw new Error('Audit structure missing');
-          if (!body.timings || typeof body.timings.total_ms !== 'number') throw new Error('Audit timing missing');
+          const expected = {
+            desktop: { width: 1440, height: 900 },
+            tablet: { width: 820, height: 1180 },
+            mobile: { width: 390, height: 844 }
+          };
+          for (const [viewport, dimensions] of Object.entries(expected)) {
+            const response = await fetch('http://127.0.0.1:8082/v1/site-audit', {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                authorization: `Bearer ${process.env.WPGO_RENDER_TOKEN}`
+              },
+              body: JSON.stringify({ url: 'https://example.com/', wait_ms: 0, screenshot: viewport === 'mobile', viewport })
+            });
+            const body = await response.json();
+            if (!response.ok || !body.ok) throw new Error(`${viewport} site audit failed: ${JSON.stringify(body)}`);
+            if (body.viewport !== viewport) throw new Error(`${viewport} preset not applied`);
+            if (body.viewport_size?.width !== dimensions.width || body.viewport_size?.height !== dimensions.height) throw new Error(`${viewport} dimensions mismatch`);
+            if (!String(body.final_url || '').startsWith('https://example.com')) throw new Error('Unexpected final URL');
+            if (!String(body.title || '').toLowerCase().includes('example')) throw new Error('Rendered title missing');
+            if (!Array.isArray(body.headings) || !Number.isInteger(body.h1_count)) throw new Error('Audit structure missing');
+            if (!body.timings || typeof body.timings.total_ms !== 'number') throw new Error('Audit timing missing');
+            if (viewport === 'mobile' && !body.screenshot_png_base64) throw new Error('Mobile screenshot missing');
+          }
           NODE
       - name: Reject unauthorized audit request
         run: |
