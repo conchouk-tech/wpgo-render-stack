@@ -6,6 +6,7 @@ const keyPath = String(process.env.WPGO_MOCK_WP_KEY || '/tmp/wpgo-mock-key.pem')
 const certPath = String(process.env.WPGO_MOCK_WP_CERT || '/tmp/wpgo-mock-cert.pem');
 const origin = `https://127.0.0.1:${port}`;
 const site = `${origin}/`;
+let approvalRequests = 0;
 
 function json(res, status, body, headers = {}) {
   const payload = JSON.stringify(body);
@@ -23,6 +24,14 @@ async function readBody(req) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+const manifest = {
+  commands: {
+    read: ['post.list', 'post.get', 'menu.list'],
+    write: ['post.create', 'post.update', 'menu.add-post', 'menu.assign-location']
+  },
+  recipes: ['clone-to-draft', 'purge-and-refresh']
+};
+
 const abilities = [
   {
     name: 'wpgo/site-info',
@@ -30,6 +39,68 @@ const abilities = [
     description: 'Read safe WordPress site information.',
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
     meta: { annotations: { readonly: true, destructive: false, idempotent: true } }
+  },
+  {
+    name: 'wpgo/platform-manifest',
+    label: 'Platform manifest',
+    description: 'Read WPGo command and recipe names.',
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+    meta: { annotations: { readonly: true, destructive: false, idempotent: true } }
+  },
+  {
+    name: 'wpgo/command-write',
+    label: 'WordPress command write',
+    description: 'Run one structured WordPress command.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', minLength: 1 },
+        args: { type: 'object', additionalProperties: true }
+      },
+      required: ['command'],
+      additionalProperties: false
+    },
+    meta: { annotations: { readonly: false, destructive: false, idempotent: false } }
+  },
+  {
+    name: 'wpgo/create-job',
+    label: 'Create approved batch job',
+    description: 'Create one exact batch plan.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        steps: {
+          type: 'array', minItems: 1, maxItems: 2500,
+          items: {
+            type: 'object',
+            properties: {
+              command: { type: 'string', minLength: 1 },
+              args: { type: 'object', additionalProperties: true }
+            },
+            required: ['command'],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ['steps'],
+      additionalProperties: false
+    },
+    meta: { annotations: { readonly: false, destructive: false, idempotent: false } }
+  },
+  {
+    name: 'wpgo/structured-builder-node-edit',
+    label: 'Structured builder node edit',
+    description: 'Regression fixture with the legacy PHP empty-array schema.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        post_id: { type: 'integer', minimum: 1 },
+        value: []
+      },
+      required: ['post_id'],
+      additionalProperties: false
+    },
+    meta: { annotations: { readonly: false, destructive: false, idempotent: false } }
   },
   {
     name: 'wpgo/create-draft-post',
@@ -74,9 +145,7 @@ const server = https.createServer(
         },
         authentication: {
           'application-passwords': {
-            endpoints: {
-              authorization: `${origin}/wp-admin/authorize-application.php`
-            }
+            endpoints: { authorization: `${origin}/wp-admin/authorize-application.php` }
           }
         }
       });
@@ -98,17 +167,24 @@ const server = https.createServer(
       }
       let body = {};
       try { body = JSON.parse(await readBody(req)); } catch {}
+      if (body.ability === 'wpgo/platform-manifest') return json(res, 200, manifest);
       if (body.ability === 'wpgo/site-info') {
-        return json(res, 200, { name: 'WPGo RC Mock Site', wpgo_version: '4.5.0-rc.1', wordpress_version: '6.9-test' });
+        return json(res, 200, { name: 'WPGo RC Mock Site', wpgo_version: '4.5.0-rc.3', wordpress_version: '6.9-test' });
       }
-      if (body.ability === 'wpgo/create-draft-post' && !body.approval_id) {
+      if (['wpgo/create-draft-post', 'wpgo/command-write', 'wpgo/create-job', 'wpgo/structured-builder-node-edit'].includes(body.ability) && !body.approval_id) {
+        approvalRequests += 1;
         return json(res, 200, {
           status: 'approval_required',
-          approval_id: 'approval-rc-123456',
-          approval_url: `${origin}/wp-admin/admin.php?page=wpgo-approval&id=approval-rc-123456`
+          approval_required: true,
+          approval_id: `approval-rc-${String(approvalRequests).padStart(6, '0')}`,
+          approval_url: `${origin}/wp-admin/admin.php?page=wpgo-approval&id=approval-rc-${String(approvalRequests).padStart(6, '0')}`
         });
       }
       return json(res, 200, { status: 'completed', ability: body.ability || '', input: body.input || {} });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/wp-json/wpgo/v1/test/approval-count') {
+      return json(res, 200, { approvals: approvalRequests });
     }
 
     if (req.method === 'GET' && url.pathname.startsWith('/wp-json/wpgo/v1/approvals/')) {
