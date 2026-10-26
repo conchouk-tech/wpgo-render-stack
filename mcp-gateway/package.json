@@ -1,17 +1,19 @@
 {
   "name": "wpgo-mcp-gateway",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.4.0-rc.1",
   "type": "module",
   "engines": {"node": ">=22"},
   "scripts": {
     "start": "node start.js",
-    "check": "node --check server-v2.js && node --check start.js && node --check state-store.js && node --check outbound-guard.js"
+    "test": "node --test security.test.js site-link.test.js",
+    "test:rc-onboarding": "node rc-onboarding.e2e.js",
+    "check": "node --check server-rc.js && node --check start.js && node --check state-store.js && node --check connection-store.js && node --check security.js && node --check site-link.js && node --check mock-wordpress.js && node --check rc-onboarding.e2e.js && node --test security.test.js site-link.test.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/node": "^2.0.0",
-    "@modelcontextprotocol/server": "^2.0.0",
-    "express": "^5.1.0",
-    "redis": "^5.8.0"
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "express": "5.1.0",
+    "redis": "5.8.0"
   }
 }
