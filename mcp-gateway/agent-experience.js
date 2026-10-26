@@ -6,6 +6,16 @@ function uniqueStrings(values) {
 
 export function normalizeManifest(raw) {
   const source = raw?.result && typeof raw.result === 'object' ? raw.result : raw;
+  if (source && typeof source === 'object' && !Array.isArray(source) && !source.commands) {
+    const hasNormalizedShape = Array.isArray(source.read) || Array.isArray(source.write) || Array.isArray(source.recipes);
+    if (hasNormalizedShape) {
+      return {
+        read: uniqueStrings(source.read),
+        write: uniqueStrings(source.write),
+        recipes: uniqueStrings(source.recipes)
+      };
+    }
+  }
   const commands = source?.commands && typeof source.commands === 'object' ? source.commands : {};
   return {
     read: uniqueStrings(commands.read),
@@ -57,11 +67,6 @@ export function nearestCommand(input, candidates) {
     const sharedTokens = needleTokens.filter(token => candidateTokens.includes(token)).length;
     const sameNamespace = candidateTokens[0] && candidateTokens[0] === needleTokens[0];
     const distance = editDistance(needle.toLowerCase(), candidate.toLowerCase());
-
-    // Agents often remember the semantic pieces of a command but use the wrong
-    // separators/order (for example menu.item.add vs menu.add-post). Reward
-    // shared command tokens heavily while still using edit distance to avoid
-    // unrelated suggestions.
     const tokenBonus = sharedTokens * 2;
     const namespaceBonus = sameNamespace ? 1.5 : 0;
     const score = distance - tokenBonus - namespaceBonus;
