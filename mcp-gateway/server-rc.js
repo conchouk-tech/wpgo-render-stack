@@ -16,8 +16,8 @@ import {
 } from './security.js';
 import { createSiteToken, readSiteToken, resourceForSite, siteTokenFromResource } from './site-link.js';
 
-const VERSION = '1.4.1-rc.2';
-const PRODUCT_VERSION = '4.5.0-rc.2';
+const VERSION = '1.4.2-rc.3';
+const PRODUCT_VERSION = '4.5.0-rc.3';
 const port = Number(process.env.PORT || 8095);
 const configuredBaseRaw = String(process.env.WPGO_MCP_PUBLIC_BASE || '').replace(/\/$/, '');
 const configuredBaseUrl = configuredBaseRaw
@@ -497,7 +497,9 @@ app.get('/health', (req, res) => {
     site_specific_mcp_urls: true,
     client_id_metadata_documents: true,
     dynamic_client_registration: true,
-    connection_history: true
+    connection_history: true,
+    agent_preflight: true,
+    schema_guard: true
   });
 });
 
