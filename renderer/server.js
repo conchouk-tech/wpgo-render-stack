@@ -5,7 +5,7 @@ import net from 'node:net';
 import crypto from 'node:crypto';
 
 const app = express();
-const VERSION = '4.3.0';
+const VERSION = '4.4.0-rc.2';
 const production = process.env.NODE_ENV === 'production';
 const port = Number(process.env.PORT || 8080);
 const token = String(process.env.WPGO_RENDER_TOKEN || '');
@@ -200,6 +200,8 @@ app.get('/health', (_req, res) => {
     browser_ready: browserReady,
     active,
     max_concurrency: maxConcurrency,
+    screenshot: true,
+    site_audit: true,
     network_policy: 'public-only',
     error: browserReady ? '' : browserStartupError
   });
@@ -280,6 +282,74 @@ app.post('/render', renderLimiter, async (req, res) => {
       message: String(error?.message || error).slice(0, 300)
     }));
     return res.status(502).json({ error: 'render_failed', request_id: requestId });
+  } finally {
+    active -= 1;
+    if (context) await context.close().catch(() => {});
+  }
+});
+
+app.post('/v1/site-audit', renderLimiter, async (req, res) => {
+  const requestId = crypto.randomUUID();
+  res.set('X-WPGo-Request-ID', requestId);
+  if (!authorized(req)) return res.status(401).json({ error: 'unauthorized', request_id: requestId });
+  if (active >= maxConcurrency) return res.status(429).json({ error: 'busy', retry_after_seconds: 2, request_id: requestId });
+  const url = await validateUrl(req.body?.url, { main: true });
+  if (!url) return res.status(400).json({ error: 'invalid_or_disallowed_url', request_id: requestId });
+  const waitMs = Math.max(0, Math.min(5000, Number(req.body?.wait_ms || 800)));
+  const includeScreenshot = req.body?.screenshot === true;
+  const fullPage = req.body?.full_page === true;
+  const started = Date.now();
+  active += 1;
+  let context;
+  try {
+    const currentBrowser = await getBrowser();
+    context = await currentBrowser.newContext({
+      javaScriptEnabled: true, ignoreHTTPSErrors: false, serviceWorkers: 'block',
+      viewport: { width: 1365, height: 768 }
+    });
+    const page = await context.newPage();
+    const consoleErrors = [];
+    page.on('console', message => { if (message.type() === 'error' && consoleErrors.length < 20) consoleErrors.push(message.text().slice(0, 500)); });
+    await page.route('**/*', async route => {
+      const request = route.request();
+      if (['media', 'font', 'websocket'].includes(request.resourceType())) return route.abort();
+      const target = await validateUrl(request.url(), { main: false });
+      if (!target) return route.abort('blockedbyclient');
+      return route.continue();
+    });
+    const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    if (waitMs) await page.waitForTimeout(waitMs);
+    const finalUrl = page.url();
+    if (!await validateUrl(finalUrl, { main: true })) throw new Error('Final navigation URL failed WPGo public-network policy.');
+    const audit = await page.evaluate(() => {
+      const headings = [...document.querySelectorAll('h1,h2,h3')].slice(0, 40).map(node => ({ level: node.tagName.toLowerCase(), text: (node.textContent || '').trim().slice(0, 240) }));
+      const images = [...document.images];
+      const links = [...document.querySelectorAll('a[href]')];
+      return {
+        title: document.title || '',
+        meta_description: document.querySelector('meta[name="description"]')?.getAttribute('content') || '',
+        canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href') || '',
+        headings,
+        h1_count: document.querySelectorAll('h1').length,
+        image_count: images.length,
+        images_missing_alt: images.filter(img => !img.hasAttribute('alt') || !(img.getAttribute('alt') || '').trim()).length,
+        link_count: links.length,
+        form_count: document.forms.length,
+        lang: document.documentElement.lang || '',
+        text_length: (document.body?.innerText || '').length
+      };
+    });
+    const screenshotBase64 = includeScreenshot
+      ? (await page.screenshot({ type: 'png', fullPage })).toString('base64')
+      : '';
+    return res.json({
+      ok: true, request_id: requestId, final_url: finalUrl, http_status: response?.status() || 0,
+      ...audit, console_errors: consoleErrors, screenshot_png_base64: screenshotBase64,
+      timings: { total_ms: Date.now() - started }
+    });
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'site_audit_failed', request_id: requestId, message: String(error?.message || error).slice(0, 300) }));
+    return res.status(502).json({ error: 'site_audit_failed', request_id: requestId });
   } finally {
     active -= 1;
     if (context) await context.close().catch(() => {});

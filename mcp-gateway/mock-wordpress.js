@@ -50,6 +50,17 @@ const server = https.createServer(
   async (req, res) => {
     const url = new URL(req.url || '/', site);
 
+    if (req.method === 'GET' && url.pathname === '/client-metadata.json') {
+      return json(res, 200, {
+        client_id: `${origin}/client-metadata.json`,
+        client_name: 'WPGo RC CIMD Client',
+        redirect_uris: ['https://client.example.test/cimd/callback'],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none'
+      });
+    }
+
     if (req.method === 'GET' && (url.pathname === '/wp-json/' || url.pathname === '/wp-json')) {
       return json(res, 200, {
         name: 'WPGo RC Mock Site',

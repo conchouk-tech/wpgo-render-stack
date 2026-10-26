@@ -21,7 +21,7 @@ async function selfTest() {
   try {
     const health = await request(`${local}/health`);
     checks.health = health.ok && health.data?.ok === true;
-    checks.version = health.data?.version === '1.4.0-rc.1' && health.data?.product_version === '4.5.0-rc.1';
+    checks.version = health.data?.version === '1.4.1-rc.2' && health.data?.product_version === '4.5.0-rc.2';
     checks.shared_state = health.data?.oauth_shared_state_required
       ? health.data?.oauth_code_store === 'redis'
       : true;
@@ -153,7 +153,7 @@ async function selfTest() {
   ];
   console.log(JSON.stringify({
     event: 'wpgo_mcp_self_test',
-    version: '4.5.0-rc.1',
+    version: '4.5.0-rc.2',
     ok: required.every(check => checks[check] === true),
     checks
   }));

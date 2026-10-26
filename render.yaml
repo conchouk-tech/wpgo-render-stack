@@ -96,6 +96,8 @@ services:
         generateValue: true
       - key: WPGO_COMMERCIAL_API
         value: "https://wpgo-commercial-api.onrender.com"
+      - key: WPGO_MCP_GATEWAY
+        value: "https://wpgo-mcp-ga.onrender.com"
 
   - type: web
     name: wpgo-commercial-api

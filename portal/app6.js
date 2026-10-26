@@ -2,16 +2,19 @@ import express from 'express';
 import crypto from 'node:crypto';
 
 const app = express();
-const VERSION = '1.6.0';
+const VERSION = '1.7.0-rc.2';
 const production = process.env.NODE_ENV === 'production';
 const port = Number(process.env.PORT || 8080);
 const apiBase = String(process.env.WPGO_COMMERCIAL_API || 'https://wpgo-commercial-api.onrender.com').replace(/\/$/, '');
+const mcpGateway = String(process.env.WPGO_MCP_GATEWAY || 'https://wpgo-mcp-ga.onrender.com').replace(/\/$/, '');
 const csrfSecret = String(process.env.WPGO_PORTAL_CSRF_SECRET || '');
 const SESSION_COOKIE = '__Host-wpgo_session';
 
 if (production) {
   const api = new URL(apiBase);
   if (api.protocol !== 'https:') throw new Error('WPGO_COMMERCIAL_API must use HTTPS in production.');
+  const gateway = new URL(mcpGateway);
+  if (gateway.protocol !== 'https:') throw new Error('WPGO_MCP_GATEWAY must use HTTPS in production.');
   if (csrfSecret.length < 32) throw new Error('WPGO_PORTAL_CSRF_SECRET must be at least 32 characters in production.');
 }
 
@@ -79,6 +82,37 @@ async function api(path, { method = 'GET', body, token } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function gatewayJson(urlOrPath) {
+  const url = String(urlOrPath || '').startsWith('https://') ? String(urlOrPath) : `${mcpGateway}${urlOrPath}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const response = await fetch(url, { headers: { accept: 'application/json' }, signal: controller.signal, redirect: 'error' });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+    return { ok: response.ok, status: response.status, data };
+  } catch (error) {
+    return { ok: false, status: 502, data: { error: 'mcp_gateway_unavailable' } };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function siteConnectionState(siteUrl) {
+  const link = await gatewayJson(`/v1/connect/site-link?site=${encodeURIComponent(siteUrl)}`);
+  if (!link.ok) return { connected: false, status: 'unavailable', connection_page: '' };
+  const status = link.data.status_url ? await gatewayJson(link.data.status_url) : { ok: false, data: {} };
+  return {
+    connected: Boolean(status.ok && status.data?.connected),
+    status: status.ok ? String(status.data?.status || 'not_connected') : 'unknown',
+    client_name: status.ok ? String(status.data?.client_name || '') : '',
+    last_seen_at: status.ok ? status.data?.last_seen_at || null : null,
+    last_refresh_at: status.ok ? status.data?.last_refresh_at || null : null,
+    connection_page: String(link.data.connection_page || '')
+  };
 }
 
 function safeReturn(value) {
@@ -178,8 +212,14 @@ async function accountPage(req, { notice = '', bad = false, licenseKey = '' } = 
   const sites = sitesResult.ok ? (sitesResult.data.sites || []) : [];
   const tickets = ticketsResult.ok ? (ticketsResult.data.tickets || []) : [];
   const csrf = csrfFor(token);
+  const states = await Promise.all(sites.map(site => siteConnectionState(site.site_url)));
   const siteHtml = sites.length
-    ? sites.map(site => `<div class="site"><div><strong>${esc(site.label || site.site_host)}</strong><br><span class="small">${esc(site.site_url || site.site_host)}</span></div><form method="post" action="/account/license"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn secondary">Generate licence</button></form></div>`).join('')
+    ? sites.map((site, index) => {
+        const state = states[index] || { connected: false, status: 'unknown' };
+        const statusLabel = state.connected ? `✓ ${state.client_name || 'AI connected'}` : (state.status === 'unavailable' ? 'Gateway unavailable' : 'AI not connected');
+        const detail = state.last_seen_at ? `Last seen ${new Date(state.last_seen_at).toLocaleString()}` : (state.last_refresh_at ? `Last refresh ${new Date(state.last_refresh_at).toLocaleString()}` : 'No completed AI session recorded');
+        return `<div class="site"><div><strong>${esc(site.label || site.site_host)}</strong><br><span class="small">${esc(site.site_url || site.site_host)}</span><br><span class="small">${esc(statusLabel)} · ${esc(detail)}</span></div><div class="choice"><a class="btn" href="/account/sites/connect-ai?site_id=${encodeURIComponent(site.id)}">Connect AI</a><form method="post" action="/account/license"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn secondary">Licence</button></form></div></div>`;
+      }).join('')
     : '<p>No sites connected yet.</p>';
   const ticketHtml = tickets.length
     ? tickets.slice(0, 12).map(ticket => `<div class="ticket"><div><strong>${esc(ticket.type)} · ${esc(ticket.subject || 'No subject')}</strong><br><span class="small">${esc(ticket.email)} · ${esc(new Date(ticket.created_at).toLocaleString())}</span><p>${esc(String(ticket.message || '').slice(0, 220))}${String(ticket.message || '').length > 220 ? '…' : ''}</p></div><span class="tag">${esc(ticket.status)}</span></div>`).join('')
@@ -226,7 +266,9 @@ app.get('/health', (_req, res) => res.json({
   pairing_confirmation: true,
   csrf_protection: true,
   annual_billing: true,
-  support_centre: true
+  support_centre: true,
+  connect_ai: true,
+  connection_telemetry: true
 }));
 
 app.get('/start', (req, res) => res.send(startPage({
@@ -316,6 +358,20 @@ app.get('/account', async (req, res) => {
   const page = await accountPage(req, { notice: String(req.query.notice || '') });
   if (!page) return res.redirect(302, '/start');
   return res.send(page);
+});
+
+app.get('/account/sites/connect-ai', async (req, res) => {
+  const token = cookie(req, SESSION_COOKIE);
+  if (!token) return res.redirect(302, '/start');
+  const sitesResult = await api('/v1/account/sites', { token });
+  if (!sitesResult.ok) return res.redirect(302, '/account?notice=' + encodeURIComponent('Could not load your sites.'));
+  const site = (sitesResult.data.sites || []).find(row => String(row.id) === String(req.query.site_id || ''));
+  if (!site) return res.status(404).send(shell('Connect AI', '<section class="section"><div class="card formbox"><h2>Site not found</h2><p>This site is not registered to your WPGo account.</p></div></section>'));
+  const link = await gatewayJson(`/v1/connect/site-link?site=${encodeURIComponent(site.site_url)}`);
+  if (!link.ok || !link.data.connection_page) {
+    return res.redirect(302, '/account?notice=' + encodeURIComponent(link.data?.message || link.data?.error || 'Could not prepare the AI connection.'));
+  }
+  return res.redirect(302, link.data.connection_page);
 });
 
 app.post('/account/sites/register', async (req, res) => {

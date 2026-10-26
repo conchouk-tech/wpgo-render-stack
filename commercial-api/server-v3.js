@@ -2,10 +2,11 @@ import express from 'express';
 import crypto from 'node:crypto';
 import pg from 'pg';
 import Stripe from 'stripe';
+import { billingMutationForEvent } from './billing-lifecycle.js';
 
 const { Pool } = pg;
 const app = express();
-const VERSION = '1.4.0';
+const VERSION = '1.5.0-rc.2';
 const port = Number(process.env.PORT || 8081);
 const production = process.env.NODE_ENV === 'production';
 const databaseUrl = String(process.env.DATABASE_URL || '').trim();
@@ -271,6 +272,13 @@ async function initDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await q(`CREATE INDEX IF NOT EXISTS wpgo_support_email_idx ON wpgo_support_tickets(email, created_at DESC)`);
+  await q(`CREATE TABLE IF NOT EXISTS wpgo_stripe_events (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    processed_at TIMESTAMPTZ
+  )`);
+  await q(`CREATE INDEX IF NOT EXISTS wpgo_stripe_events_received_idx ON wpgo_stripe_events(received_at DESC)`);
 }
 
 async function getOrCreateAccount(email) {
@@ -888,59 +896,51 @@ app.post('/v1/billing/webhook', express.raw({ type: 'application/json' }), async
     return res.status(400).send('invalid_signature');
   }
 
+  let claimed = false;
   try {
-    const object = event.data.object;
-    if (event.type === 'checkout.session.completed') {
-      const accountId = object.metadata?.wpgo_account_id || object.client_reference_id || '';
-      const plan = object.metadata?.wpgo_plan || '';
-      if (accountId && PLANS[plan] && plan !== 'founder') {
+    const claim = await q(
+      `INSERT INTO wpgo_stripe_events(event_id,event_type) VALUES($1,$2)
+       ON CONFLICT(event_id) DO NOTHING RETURNING event_id`,
+      [String(event.id || ''), String(event.type || '')]
+    );
+    claimed = Boolean(claim.rows[0]);
+    if (!claimed) return res.json({ received: true, duplicate: true });
+
+    const mutation = billingMutationForEvent(event);
+    if (mutation.kind === 'set_subscription') {
+      await q(
+        `UPDATE wpgo_accounts SET plan=$1,stripe_subscription_id=$2,subscription_status=$3,updated_at=NOW()
+         WHERE id=$4 AND is_founder=FALSE`,
+        [mutation.plan, mutation.subscription_id, mutation.status, mutation.account_id]
+      );
+    } else if (mutation.kind === 'cancel_subscription') {
+      if (mutation.account_id) {
         await q(
-          `UPDATE wpgo_accounts SET plan=$1,stripe_subscription_id=$2,subscription_status='active',updated_at=NOW() WHERE id=$3 AND is_founder=FALSE`,
-          [plan, String(object.subscription || ''), accountId]
+          `UPDATE wpgo_accounts SET plan='free',stripe_subscription_id=NULL,subscription_status=$1,updated_at=NOW()
+           WHERE id=$2 AND is_founder=FALSE`,
+          [mutation.status, mutation.account_id]
+        );
+      } else if (mutation.subscription_id) {
+        await q(
+          `UPDATE wpgo_accounts SET plan='free',stripe_subscription_id=NULL,subscription_status=$1,updated_at=NOW()
+           WHERE stripe_subscription_id=$2 AND is_founder=FALSE`,
+          [mutation.status, mutation.subscription_id]
         );
       }
+    } else if (mutation.kind === 'set_subscription_status') {
+      await q(
+        `UPDATE wpgo_accounts SET subscription_status=$1,updated_at=NOW()
+         WHERE stripe_subscription_id=$2 AND is_founder=FALSE`,
+        [mutation.status, mutation.subscription_id]
+      );
     }
-    if (['customer.subscription.created', 'customer.subscription.updated'].includes(event.type)) {
-      const accountId = object.metadata?.wpgo_account_id || '';
-      const plan = object.metadata?.wpgo_plan || '';
-      const status = cleanText(object.status || 'active', 40);
-      if (accountId && PLANS[plan] && plan !== 'founder') {
-        await q(
-          `UPDATE wpgo_accounts SET plan=$1,stripe_subscription_id=$2,subscription_status=$3,updated_at=NOW() WHERE id=$4 AND is_founder=FALSE`,
-          [plan, String(object.id || ''), status, accountId]
-        );
-      }
-    }
-    if (event.type === 'customer.subscription.deleted') {
-      const accountId = object.metadata?.wpgo_account_id || '';
-      if (accountId) {
-        await q(
-          `UPDATE wpgo_accounts SET plan='free',stripe_subscription_id=NULL,subscription_status='cancelled',updated_at=NOW() WHERE id=$1 AND is_founder=FALSE`,
-          [accountId]
-        );
-      }
-    }
-    if (event.type === 'invoice.payment_failed') {
-      const subscription = String(object.subscription || '');
-      if (subscription) {
-        await q(
-          `UPDATE wpgo_accounts SET subscription_status='past_due',updated_at=NOW() WHERE stripe_subscription_id=$1 AND is_founder=FALSE`,
-          [subscription]
-        );
-      }
-    }
-    if (event.type === 'invoice.paid') {
-      const subscription = String(object.subscription || '');
-      if (subscription) {
-        await q(
-          `UPDATE wpgo_accounts SET subscription_status='active',updated_at=NOW() WHERE stripe_subscription_id=$1 AND is_founder=FALSE`,
-          [subscription]
-        );
-      }
-    }
-    return res.json({ received: true });
+
+    await q(`UPDATE wpgo_stripe_events SET processed_at=NOW() WHERE event_id=$1`, [String(event.id || '')]);
+    console.log(JSON.stringify({ event: 'stripe_webhook_processed', stripe_event: event.type, mutation: mutation.kind }));
+    return res.json({ received: true, duplicate: false, mutation: mutation.kind });
   } catch (error) {
-    console.error(JSON.stringify({ event: 'stripe_webhook_error', type: event.type, message: String(error?.message || error).slice(0, 300) }));
+    if (claimed) await q(`DELETE FROM wpgo_stripe_events WHERE event_id=$1 AND processed_at IS NULL`, [String(event?.id || '')]).catch(() => {});
+    console.error(JSON.stringify({ event: 'stripe_webhook_error', type: event?.type || '', message: String(error?.message || error).slice(0, 300) }));
     return res.status(500).send('webhook_processing_failed');
   }
 });

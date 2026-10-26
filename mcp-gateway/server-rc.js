@@ -16,8 +16,8 @@ import {
 } from './security.js';
 import { createSiteToken, readSiteToken, resourceForSite, siteTokenFromResource } from './site-link.js';
 
-const VERSION = '1.4.0-rc.1';
-const PRODUCT_VERSION = '4.5.0-rc.1';
+const VERSION = '1.4.1-rc.2';
+const PRODUCT_VERSION = '4.5.0-rc.2';
 const port = Number(process.env.PORT || 8095);
 const configuredBaseRaw = String(process.env.WPGO_MCP_PUBLIC_BASE || '').replace(/\/$/, '');
 const configuredBaseUrl = configuredBaseRaw
@@ -496,7 +496,8 @@ app.get('/health', (req, res) => {
     wordpress_first_onboarding: true,
     site_specific_mcp_urls: true,
     client_id_metadata_documents: true,
-    dynamic_client_registration: true
+    dynamic_client_registration: true,
+    connection_history: true
   });
 });
 
@@ -520,9 +521,9 @@ app.get('/v1/connect/status/:siteToken', connectLimiter, async (req, res) => {
   const site = readSiteToken(req.params.siteToken, rawSecret);
   if (!site) return res.status(404).json({ ok: false, status: 'invalid_site_link', request_id: req.id });
   try {
-    const row = await connectionStore.getBySite(site);
+    const [row, events] = await Promise.all([connectionStore.getBySite(site), connectionStore.getHistory(site)]);
     if (!row) {
-      return res.json({ ok: true, site, status: 'not_connected', connected: false, request_id: req.id });
+      return res.json({ ok: true, site, status: 'not_connected', connected: false, events, request_id: req.id });
     }
     const refreshExpiry = row.refresh_expires_at ? Date.parse(row.refresh_expires_at) : 0;
     const connected = row.status === 'connected' && (!refreshExpiry || refreshExpiry > Date.now());
@@ -530,7 +531,7 @@ app.get('/v1/connect/status/:siteToken', connectLimiter, async (req, res) => {
       ok: true, site, connected, status: connected ? 'connected' : row.status,
       client_name: row.client_name || '', connected_at: row.connected_at || null,
       last_refresh_at: row.last_refresh_at || null, last_seen_at: row.last_seen_at || null,
-      refresh_expires_at: row.refresh_expires_at || null, request_id: req.id
+      refresh_expires_at: row.refresh_expires_at || null, events, request_id: req.id
     });
   } catch (error) {
     console.error(JSON.stringify({ event: 'connection_status_error', request_id: req.id, message: String(error?.message || error).slice(0, 300) }));

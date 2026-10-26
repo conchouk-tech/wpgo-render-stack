@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class WPGo_Connect_AI {
-	const VERSION = '4.5.0-rc.1';
+	const VERSION = '4.5.0-rc.2';
 	const DEFAULT_GATEWAY = 'https://wpgo-mcp-ga.onrender.com';
 	const PAGE_SLUG = 'wpgo-connect-ai';
 
@@ -34,8 +34,28 @@ final class WPGo_Connect_AI {
 		add_action( 'admin_notices', array( $this, 'maybe_show_recovery_email_notice' ) );
 	}
 
+	private function parent_menu_slug() {
+		$preferred = apply_filters( 'wpgo_connect_ai_parent_slug', '' );
+		if ( ! empty( $preferred ) ) {
+			return $preferred;
+		}
+		global $menu;
+		foreach ( (array) $menu as $item ) {
+			$slug = isset( $item[2] ) ? (string) $item[2] : '';
+			if ( in_array( $slug, array( 'wpgo', 'wpgo-dashboard', 'wpgo-settings' ), true ) ) {
+				return $slug;
+			}
+		}
+		return 'tools.php';
+	}
+
+	private function page_url() {
+		$parent = $this->parent_menu_slug();
+		return 'tools.php' === $parent ? admin_url( 'tools.php?page=' . self::PAGE_SLUG ) : admin_url( 'admin.php?page=' . self::PAGE_SLUG );
+	}
+
 	public function register_menu() {
-		$parent = apply_filters( 'wpgo_connect_ai_parent_slug', 'tools.php' );
+		$parent = $this->parent_menu_slug();
 		if ( 'tools.php' === $parent ) {
 			add_management_page(
 				__( 'Connect AI', 'wpgo' ),
@@ -133,7 +153,9 @@ final class WPGo_Connect_AI {
 						'client_name'     => sanitize_text_field( isset( $status_body['client_name'] ) ? $status_body['client_name'] : '' ),
 						'connected_at'    => sanitize_text_field( isset( $status_body['connected_at'] ) ? $status_body['connected_at'] : '' ),
 						'last_refresh_at' => sanitize_text_field( isset( $status_body['last_refresh_at'] ) ? $status_body['last_refresh_at'] : '' ),
-						'last_seen_at'    => sanitize_text_field( isset( $status_body['last_seen_at'] ) ? $status_body['last_seen_at'] : '' ),
+						'last_seen_at'       => sanitize_text_field( isset( $status_body['last_seen_at'] ) ? $status_body['last_seen_at'] : '' ),
+						'refresh_expires_at' => sanitize_text_field( isset( $status_body['refresh_expires_at'] ) ? $status_body['refresh_expires_at'] : '' ),
+						'events'             => isset( $status_body['events'] ) && is_array( $status_body['events'] ) ? array_slice( $status_body['events'], 0, 8 ) : array(),
 					);
 				}
 			}
@@ -156,7 +178,7 @@ final class WPGo_Connect_AI {
 		}
 		check_admin_referer( 'wpgo_refresh_connect_ai' );
 		delete_transient( 'wpgo_connect_ai_status_' . get_current_blog_id() );
-		wp_safe_redirect( admin_url( 'tools.php?page=' . self::PAGE_SLUG . '&refreshed=1' ) );
+		wp_safe_redirect( add_query_arg( 'refreshed', '1', $this->page_url() ) );
 		exit;
 	}
 
@@ -231,6 +253,23 @@ final class WPGo_Connect_AI {
 			echo '<div class="wpgo-status"><strong class="wpgo-ok">✓ ' . esc_html( sprintf( __( '%s connected', 'wpgo' ), $client_name ) ) . '</strong><br><span class="wpgo-note">' . esc_html__( 'WPGo has verified the OAuth token exchange with the AI client.', 'wpgo' ) . '</span></div>';
 		} else {
 			echo '<div class="wpgo-status"><strong>' . esc_html__( 'WordPress ready — AI connection not yet verified', 'wpgo' ) . '</strong><br><span class="wpgo-note">' . esc_html__( 'This site is ready to connect, but WPGo has not yet seen a completed OAuth token exchange from Claude, ChatGPT or another AI client. WordPress readiness alone does not mean the AI is connected.', 'wpgo' ) . '</span></div>';
+		}
+		$events = isset( $ai_status['events'] ) && is_array( $ai_status['events'] ) ? $ai_status['events'] : array();
+		if ( ! empty( $ai_status['last_seen_at'] ) || ! empty( $ai_status['last_refresh_at'] ) || ! empty( $ai_status['refresh_expires_at'] ) ) {
+			echo '<div class="wpgo-card" style="margin-top:14px"><h2>' . esc_html__( 'Connection health', 'wpgo' ) . '</h2>';
+			if ( ! empty( $ai_status['last_seen_at'] ) ) echo '<p><strong>' . esc_html__( 'Last AI activity:', 'wpgo' ) . '</strong> ' . esc_html( $ai_status['last_seen_at'] ) . '</p>';
+			if ( ! empty( $ai_status['last_refresh_at'] ) ) echo '<p><strong>' . esc_html__( 'Last OAuth refresh:', 'wpgo' ) . '</strong> ' . esc_html( $ai_status['last_refresh_at'] ) . '</p>';
+			if ( ! empty( $ai_status['refresh_expires_at'] ) ) echo '<p><strong>' . esc_html__( 'Refresh credential expiry:', 'wpgo' ) . '</strong> ' . esc_html( $ai_status['refresh_expires_at'] ) . '</p>';
+			echo '</div>';
+		}
+		if ( ! empty( $events ) ) {
+			echo '<div class="wpgo-card" style="margin-top:14px"><h2>' . esc_html__( 'Recent connection activity', 'wpgo' ) . '</h2>';
+			foreach ( $events as $event ) {
+				$type = sanitize_text_field( isset( $event['type'] ) ? $event['type'] : 'activity' );
+				$time = sanitize_text_field( isset( $event['time'] ) ? $event['time'] : '' );
+				echo '<p><strong>' . esc_html( $type ) . '</strong>' . ( $time ? ' · ' . esc_html( $time ) : '' ) . '</p>';
+			}
+			echo '</div>';
 		}
 		echo '<div class="wpgo-grid">';
 		$this->render_provider_card(

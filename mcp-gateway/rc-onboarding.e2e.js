@@ -138,6 +138,28 @@ assert.ok(refreshed.data?.access_token);
 assert.ok(refreshed.data?.refresh_token);
 assert.notEqual(refreshed.data.refresh_token, token.data.refresh_token);
 
+console.log('RC E2E: confirming gateway-visible connection state and history');
+const linkStatus = await request(link.data.status_url);
+assert.equal(linkStatus.response.status, 200, linkStatus.text);
+assert.equal(linkStatus.data?.connected, true);
+assert.match(String(linkStatus.data?.client_name || ''), /WPGo RC E2E Client/);
+assert.ok(Array.isArray(linkStatus.data?.events));
+assert.ok(linkStatus.data.events.some(row => row.type === 'connected'));
+assert.ok(linkStatus.data.events.some(row => row.type === 'token_refreshed'));
+
+console.log('RC E2E: validating CIMD client metadata discovery');
+const cimdAuthorize = new URL(`${gateway}/oauth/authorize`);
+cimdAuthorize.searchParams.set('response_type', 'code');
+cimdAuthorize.searchParams.set('client_id', `${new URL(site).origin}/client-metadata.json`);
+cimdAuthorize.searchParams.set('redirect_uri', 'https://client.example.test/cimd/callback');
+cimdAuthorize.searchParams.set('code_challenge', challenge);
+cimdAuthorize.searchParams.set('code_challenge_method', 'S256');
+cimdAuthorize.searchParams.set('resource', mcpUrl);
+cimdAuthorize.searchParams.set('scope', 'mcp');
+const cimd = await request(cimdAuthorize.toString());
+assert.equal(cimd.response.status, 302, cimd.text);
+assert.equal(new URL(cimd.response.headers.get('location')).pathname, '/wp-admin/authorize-application.php');
+
 console.log('RC E2E: rejecting a tampered site connector URL');
 const siteToken = decodeURIComponent(mcpPath.split('/').pop());
 const tamperedToken = `${siteToken.slice(0, -1)}${siteToken.endsWith('A') ? 'B' : 'A'}`;
@@ -147,7 +169,7 @@ assert.equal(tamperedMetadata.response.status, 404);
 console.log(JSON.stringify({
   event: 'wpgo_rc_onboarding_e2e',
   ok: true,
-  product_version: '4.5.0-rc.1',
+  product_version: '4.5.0-rc.2',
   checks: [
     'site_link',
     'resource_metadata',
