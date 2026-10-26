@@ -62,6 +62,24 @@ const VIEWPORTS = Object.freeze({
           text = connect.read_text().replace("const VERSION = '4.5.0-rc.2';", "const VERSION = '4.5.0-rc.3';")
           connect.write_text(text)
 
+          agent = Path('wordpress-plugin/includes/class-wpgo-agent-experience.php')
+          text = agent.read_text()
+          preflight_anchor = "\t\t$manifest = self::manifest();\n\t\t$input    = is_array( $input ) ? $input : array();\n"
+          media_preflight = """\t\t$manifest = self::manifest();
+\t\t$input    = is_array( $input ) ? $input : array();
+
+\t\tif ( 'wpgo/upload-media-from-url' === $name && class_exists( 'WPGo_Media_Abilities_RC3' ) ) {
+\t\t\treturn WPGo_Media_Abilities_RC3::preflight_remote_url( $input['url'] ?? '' );
+\t\t}
+"""
+          if preflight_anchor in text and "'wpgo/upload-media-from-url' === $name" not in text:
+              text = text.replace(preflight_anchor, media_preflight, 1)
+          label_anchor = "\t\t\t'wpgo/structured-builder-batch-edit'     => 'Apply a structured builder edit plan',\n"
+          label_extra = "\t\t\t'wpgo/upload-media-from-url'             => 'Upload one media file from a validated public HTTPS URL',\n\t\t\t'wpgo/request-media-upload'              => 'Create a short-lived local-device media upload session',\n\t\t\t'wpgo/theme-setting-update'              => 'Update one reviewed safe theme setting',\n"
+          if label_anchor in text and "'wpgo/upload-media-from-url'" not in text.split('private static function approval_summary',1)[-1]:
+              text = text.replace(label_anchor, label_anchor + label_extra, 1)
+          agent.write_text(text)
+
           ci = Path('.github/workflows/commercial-hardening.yml')
           text = ci.read_text()
           text = text.replace('1.4.1-rc.2', '1.4.2-rc.3').replace('4.5.0-rc.2', '4.5.0-rc.3')
@@ -70,12 +88,21 @@ const VIEWPORTS = Object.freeze({
           health_new = "if (!health.wordpress_first_onboarding || !health.site_specific_mcp_urls || !health.approval_proxy || !health.connection_history || !health.agent_preflight || !health.schema_guard) {"
           text = text.replace(health_old, health_new)
           lint_marker = "          php -l wordpress-plugin/includes/class-wpgo-connect-ai.php\n"
-          lint_extra = "          php -l wordpress-plugin/includes/class-wpgo-agent-experience.php\n          php -l wordpress-plugin/includes/class-wpgo-theme-settings.php\n          php wordpress-plugin/tests/agent-experience-smoke.php\n"
-          if lint_marker in text and 'agent-experience-smoke.php' not in text:
+          lint_extra = "          php -l wordpress-plugin/includes/class-wpgo-agent-experience.php\n          php -l wordpress-plugin/includes/class-wpgo-theme-settings.php\n          php -l wordpress-plugin/includes/class-wpgo-media-abilities.php\n          php wordpress-plugin/tests/agent-experience-smoke.php\n          php wordpress-plugin/tests/media-abilities-smoke.php\n"
+          if lint_marker in text and 'media-abilities-smoke.php' not in text:
+              # Avoid duplicating an earlier partial RC3 insertion.
+              for old in [
+                  "          php -l wordpress-plugin/includes/class-wpgo-agent-experience.php\n          php -l wordpress-plugin/includes/class-wpgo-theme-settings.php\n          php wordpress-plugin/tests/agent-experience-smoke.php\n",
+              ]:
+                  text = text.replace(old, '')
               text = text.replace(lint_marker, lint_marker + lint_extra, 1)
           copy_marker = "          cp wordpress-plugin/includes/class-wpgo-connect-ai.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n"
-          copy_extra = "          cp wordpress-plugin/includes/class-wpgo-agent-experience.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n          cp wordpress-plugin/includes/class-wpgo-theme-settings.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n"
-          if copy_marker in text and 'class-wpgo-agent-experience.php /tmp/' not in text:
+          copy_extra = "          cp wordpress-plugin/includes/class-wpgo-agent-experience.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n          cp wordpress-plugin/includes/class-wpgo-theme-settings.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n          cp wordpress-plugin/includes/class-wpgo-media-abilities.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n"
+          if copy_marker in text and 'class-wpgo-media-abilities.php /tmp/' not in text:
+              for old in [
+                  "          cp wordpress-plugin/includes/class-wpgo-agent-experience.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n          cp wordpress-plugin/includes/class-wpgo-theme-settings.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n",
+              ]:
+                  text = text.replace(old, '')
               text = text.replace(copy_marker, copy_marker + copy_extra, 1)
           ci.write_text(text)
           PY
@@ -83,10 +110,10 @@ const VIEWPORTS = Object.freeze({
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add mcp-gateway/server-rc.js renderer/server.js wordpress-plugin/includes/class-wpgo-connect-ai.php .github/workflows/commercial-hardening.yml
+          git add mcp-gateway/server-rc.js renderer/server.js wordpress-plugin/includes/class-wpgo-connect-ai.php wordpress-plugin/includes/class-wpgo-agent-experience.php .github/workflows/commercial-hardening.yml
           if git diff --cached --quiet; then
             echo 'RC3 runtime/release patches already current.'
             exit 0
           fi
-          git commit -m 'Apply WPGo 4.5 RC3 runtime, visual and release-gate patches'
+          git commit -m 'Apply WPGo 4.5 RC3 runtime, preflight, visual and release-gate patches'
           git push origin HEAD:release/wpgo-4.5.0-rc3
