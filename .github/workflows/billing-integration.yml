@@ -1,0 +1,80 @@
+name: WPGo billing integration
+
+on:
+  push:
+    branches:
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  stripe-webhook-lifecycle:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-database-password
+          POSTGRES_DB: wpgo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d wpgo"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    defaults:
+      run:
+        working-directory: commercial-api
+    env:
+      NODE_ENV: test
+      PORT: '8081'
+      DATABASE_URL: postgresql://postgres:ci-database-password@localhost:5432/wpgo
+      WPGO_SESSION_SECRET: ci-only-session-secret-value-not-for-production-use
+      WPGO_CONTROL_ADMIN_TOKEN: ci-only-control-token-value-not-for-production-use
+      WPGO_DEV_AUTH: '0'
+      STRIPE_SECRET_KEY: sk_test_wpgo_ci_local_signature_only
+      STRIPE_WEBHOOK_SECRET: whsec_wpgo_ci_webhook_secret
+      WPGO_E2E_API: http://127.0.0.1:8081
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: commercial-api/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - name: Start commercial API
+        run: |
+          npm start >/tmp/wpgo-billing-api.log 2>&1 &
+          echo $! > /tmp/wpgo-billing-api.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8081/health >/tmp/wpgo-billing-health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/wpgo-billing-api.log
+          exit 1
+      - name: Run signed Stripe webhook lifecycle
+        run: node stripe-webhook.e2e.js
+      - name: Verify webhook processing left no unprocessed claimed events
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+          const pending = await pool.query('SELECT COUNT(*)::int AS count FROM wpgo_stripe_events WHERE processed_at IS NULL');
+          await pool.end();
+          if (pending.rows[0]?.count !== 0) throw new Error(`Unprocessed Stripe event claims remain: ${pending.rows[0]?.count}`);
+          NODE
+      - name: Stop API
+        if: always()
+        run: |
+          kill "$(cat /tmp/wpgo-billing-api.pid 2>/dev/null)" 2>/dev/null || true
+          tail -n 100 /tmp/wpgo-billing-api.log || true
