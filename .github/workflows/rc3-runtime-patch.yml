@@ -57,15 +57,36 @@ const VIEWPORTS = Object.freeze({
           if result in text and 'viewport: viewportName' not in text:
               text = text.replace(result, "      ok: true, request_id: requestId, final_url: finalUrl, http_status: response?.status() || 0,\n      viewport: viewportName, viewport_size: { width: viewport.width, height: viewport.height },\n", 1)
           renderer.write_text(text)
+
+          connect = Path('wordpress-plugin/includes/class-wpgo-connect-ai.php')
+          text = connect.read_text().replace("const VERSION = '4.5.0-rc.2';", "const VERSION = '4.5.0-rc.3';")
+          connect.write_text(text)
+
+          ci = Path('.github/workflows/commercial-hardening.yml')
+          text = ci.read_text()
+          text = text.replace('1.4.1-rc.2', '1.4.2-rc.3').replace('4.5.0-rc.2', '4.5.0-rc.3')
+          text = text.replace('RC2', 'RC3')
+          health_old = "if (!health.wordpress_first_onboarding || !health.site_specific_mcp_urls || !health.approval_proxy || !health.connection_history) {"
+          health_new = "if (!health.wordpress_first_onboarding || !health.site_specific_mcp_urls || !health.approval_proxy || !health.connection_history || !health.agent_preflight || !health.schema_guard) {"
+          text = text.replace(health_old, health_new)
+          lint_marker = "          php -l wordpress-plugin/includes/class-wpgo-connect-ai.php\n"
+          lint_extra = "          php -l wordpress-plugin/includes/class-wpgo-agent-experience.php\n          php -l wordpress-plugin/includes/class-wpgo-theme-settings.php\n          php wordpress-plugin/tests/agent-experience-smoke.php\n"
+          if lint_marker in text and 'agent-experience-smoke.php' not in text:
+              text = text.replace(lint_marker, lint_marker + lint_extra, 1)
+          copy_marker = "          cp wordpress-plugin/includes/class-wpgo-connect-ai.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n"
+          copy_extra = "          cp wordpress-plugin/includes/class-wpgo-agent-experience.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n          cp wordpress-plugin/includes/class-wpgo-theme-settings.php /tmp/wpgo-connect-ai-4.5.0-rc.3/wpgo-connect-ai/includes/\n"
+          if copy_marker in text and 'class-wpgo-agent-experience.php /tmp/' not in text:
+              text = text.replace(copy_marker, copy_marker + copy_extra, 1)
+          ci.write_text(text)
           PY
-      - name: Commit runtime patches if needed
+      - name: Commit RC3 patches if needed
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add mcp-gateway/server-rc.js renderer/server.js
+          git add mcp-gateway/server-rc.js renderer/server.js wordpress-plugin/includes/class-wpgo-connect-ai.php .github/workflows/commercial-hardening.yml
           if git diff --cached --quiet; then
-            echo 'RC3 runtime patches already current.'
+            echo 'RC3 runtime/release patches already current.'
             exit 0
           fi
-          git commit -m 'Apply WPGo 4.5 RC3 runtime and responsive audit patches'
+          git commit -m 'Apply WPGo 4.5 RC3 runtime, visual and release-gate patches'
           git push origin HEAD:release/wpgo-4.5.0-rc3
