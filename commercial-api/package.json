@@ -1,12 +1,13 @@
 {
   "name": "wpgo-commercial-api",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.5.0-rc.2",
   "type": "module",
   "engines": {"node": ">=22"},
   "scripts": {
     "start": "node bootstrap.js",
-    "check": "node --check bootstrap.js && node --check runtime-readiness.js && node --check stripe-runtime-check.js && node --check server-v3.js"
+    "test": "node --test billing-lifecycle.test.js",
+    "check": "node --check bootstrap.js && node --check runtime-readiness.js && node --check stripe-runtime-check.js && node --check billing-lifecycle.js && node --check server-v3.js && node --test billing-lifecycle.test.js"
   },
   "dependencies": {
     "express": "5.1.0",
