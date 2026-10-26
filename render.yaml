@@ -2,7 +2,7 @@ services:
   - type: web
     name: wpgo-renderer-ga
     runtime: docker
-    plan: free
+    plan: 0.5c-512mb
     dockerfilePath: ./renderer/Dockerfile
     dockerContext: ./renderer
     envVars:
@@ -22,15 +22,15 @@ services:
   - type: keyvalue
     name: wpgo-mcp-state
     region: frankfurt
-    plan: free
+    plan: 256mb
     maxmemoryPolicy: noeviction
-    persistenceMode: off
+    persistenceMode: journal-snapshot
     ipAllowList: []
 
   - type: web
     name: wpgo-mcp-ga
     runtime: node
-    plan: free
+    plan: 0.5c-512mb
     region: frankfurt
     buildCommand: cd mcp-gateway && npm ci
     startCommand: cd mcp-gateway && npm start
@@ -53,7 +53,7 @@ services:
   - type: web
     name: wpgo-control-plane-ga
     runtime: docker
-    plan: free
+    plan: 0.5c-512mb
     dockerfilePath: ./control-plane/Dockerfile
     dockerContext: ./control-plane
     healthCheckPath: /health
@@ -84,7 +84,7 @@ services:
   - type: web
     name: wpgo-commercial-web
     runtime: node
-    plan: free
+    plan: 0.5c-512mb
     region: frankfurt
     buildCommand: cd portal && npm ci
     startCommand: cd portal && npm start
@@ -100,7 +100,7 @@ services:
   - type: web
     name: wpgo-commercial-api
     runtime: node
-    plan: free
+    plan: 0.5c-512mb
     region: frankfurt
     buildCommand: cd commercial-api && npm ci
     startCommand: cd commercial-api && npm start
@@ -150,5 +150,5 @@ services:
 
 databases:
   - name: wpgo-commercial-db
-    plan: free
+    plan: 0.1c-256mb
     region: frankfurt
