@@ -32,13 +32,15 @@ add_filter(
 add_action(
 	'plugins_loaded',
 	static function () {
-		$connect = __DIR__ . '/includes/class-wpgo-connect-ai.php';
-		if ( is_readable( $connect ) ) {
-			require_once $connect;
-		}
-		$agent_experience = __DIR__ . '/includes/class-wpgo-agent-experience.php';
-		if ( is_readable( $agent_experience ) ) {
-			require_once $agent_experience;
+		$modules = array(
+			__DIR__ . '/includes/class-wpgo-connect-ai.php',
+			__DIR__ . '/includes/class-wpgo-agent-experience.php',
+			__DIR__ . '/includes/class-wpgo-theme-settings.php',
+		);
+		foreach ( $modules as $module ) {
+			if ( is_readable( $module ) ) {
+				require_once $module;
+			}
 		}
 	},
 	20
