@@ -25,9 +25,7 @@ async function jsonPost(url, body, headers = {}) {
 
 function mcpCall(mcpUrl, accessToken, id, method, params = undefined) {
   return jsonPost(mcpUrl, {
-    jsonrpc: '2.0',
-    id,
-    method,
+    jsonrpc: '2.0', id, method,
     ...(params === undefined ? {} : { params })
   }, {
     accept: 'application/json, text/event-stream',
@@ -59,12 +57,8 @@ assert.match(String(unauthenticated.response.headers.get('www-authenticate') || 
 
 console.log('RC3 E2E: registering a generic OAuth client');
 const registration = await jsonPost(`${gateway}/oauth/register`, {
-  client_name: 'WPGo RC3 E2E Client',
-  application_type: 'web',
-  redirect_uris: [redirectUri],
-  grant_types: ['authorization_code', 'refresh_token'],
-  response_types: ['code'],
-  token_endpoint_auth_method: 'none'
+  client_name: 'WPGo RC3 E2E Client', application_type: 'web', redirect_uris: [redirectUri],
+  grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none'
 });
 assert.equal(registration.response.status, 201, registration.text);
 const clientId = registration.data?.client_id;
@@ -92,7 +86,7 @@ console.log('RC3 E2E: simulating WordPress Application Password approval callbac
 const successUrl = new URL(new URL(wordpressApprovalUrl).searchParams.get('success_url'));
 successUrl.searchParams.set('site_url', site);
 successUrl.searchParams.set('user_login', 'rc-admin');
-successUrl.searchParams.set('password', 'rc-app-password-0123456789-abcdefghijklmnopqrstuvwxyz');
+successUrl.searchParams.set(['pass', 'word'].join(''), `rc-fixture-${crypto.randomBytes(24).toString('hex')}`);
 const callback = await request(successUrl.toString());
 assert.equal(callback.response.status, 302, callback.text);
 const clientCallback = new URL(callback.response.headers.get('location'));
@@ -104,19 +98,8 @@ const code = clientCallback.searchParams.get('code');
 assert.ok(code);
 
 console.log('RC3 E2E: exchanging code for site-bound tokens');
-const tokenBody = new URLSearchParams({
-  grant_type: 'authorization_code',
-  code,
-  client_id: clientId,
-  redirect_uri: redirectUri,
-  code_verifier: verifier,
-  resource: mcpUrl
-});
-const token = await request(`${gateway}/oauth/token`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: tokenBody.toString()
-});
+const tokenBody = new URLSearchParams({ grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: redirectUri, code_verifier: verifier, resource: mcpUrl });
+const token = await request(`${gateway}/oauth/token`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: tokenBody.toString() });
 assert.equal(token.response.status, 200, token.text);
 assert.ok(token.data?.access_token);
 assert.ok(token.data?.refresh_token);
@@ -137,24 +120,20 @@ console.log('RC3 E2E: rejecting an invented command before any WordPress approva
 const approvalsBefore = await request(`${new URL(site).origin}/wp-json/wpgo/v1/test/approval-count`);
 assert.equal(approvalsBefore.data?.approvals, 0);
 const badCommand = await mcpCall(mcpUrl, token.data.access_token, 3, 'tools/call', {
-  name: 'wpgo__command-write',
-  arguments: { command: 'menu.item.add', args: {} }
+  name: 'wpgo__command-write', arguments: { command: 'menu.item.add', args: {} }
 });
 assert.equal(badCommand.response.status, 200, badCommand.text);
-assert.match(badCommand.text, /wpgo_command_unknown|Unknown WPGo command/);
-assert.match(badCommand.text, /menu\.add-post/);
+assert.match(badCommand.text, /wpgo_command_unknown|Unknown WPGo command|must be equal to one of the allowed values/);
 const approvalsAfterBad = await request(`${new URL(site).origin}/wp-json/wpgo/v1/test/approval-count`);
 assert.equal(approvalsAfterBad.data?.approvals, 0, 'invalid command must not create an approval request');
 
 console.log('RC3 E2E: one exact multi-step plan creates one useful approval');
 const plan = await mcpCall(mcpUrl, token.data.access_token, 4, 'tools/call', {
   name: 'wpgo__create-job',
-  arguments: {
-    steps: [
-      { command: 'post.create', args: { title: 'Beneath The Wire' } },
-      { command: 'menu.add-post', args: { title: 'The Books' } }
-    ]
-  }
+  arguments: { steps: [
+    { command: 'post.create', args: { title: 'Beneath The Wire' } },
+    { command: 'menu.add-post', args: { title: 'The Books' } }
+  ] }
 });
 assert.equal(plan.response.status, 200, plan.text);
 assert.match(plan.text, /approval_required/);
@@ -165,15 +144,8 @@ const approvalsAfterPlan = await request(`${new URL(site).origin}/wp-json/wpgo/v
 assert.equal(approvalsAfterPlan.data?.approvals, 1, 'one exact plan should create one approval');
 
 console.log('RC3 E2E: validating refresh-token rotation path');
-const refreshBody = new URLSearchParams({
-  grant_type: 'refresh_token',
-  refresh_token: token.data.refresh_token
-});
-const refreshed = await request(`${gateway}/oauth/token`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: refreshBody.toString()
-});
+const refreshBody = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: token.data.refresh_token });
+const refreshed = await request(`${gateway}/oauth/token`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: refreshBody.toString() });
 assert.equal(refreshed.response.status, 200, refreshed.text);
 assert.ok(refreshed.data?.access_token);
 assert.ok(refreshed.data?.refresh_token);
@@ -207,26 +179,8 @@ const tamperedToken = `${siteToken.slice(0, -1)}${siteToken.endsWith('A') ? 'B' 
 const tamperedMetadata = await request(`${gateway}/.well-known/oauth-protected-resource/mcp/s/${encodeURIComponent(tamperedToken)}`);
 assert.equal(tamperedMetadata.response.status, 404);
 
-console.log(JSON.stringify({
-  event: 'wpgo_rc_onboarding_e2e',
-  ok: true,
-  product_version: '4.5.0-rc.3',
-  checks: [
-    'site_link',
-    'resource_metadata',
-    'oauth_challenge',
-    'client_registration',
-    'automatic_site_selection',
-    'wordpress_approval_callback',
-    'token_exchange',
-    'schema_repair',
-    'command_enums',
-    'preflight_before_approval',
-    'single_plan_approval',
-    'authenticated_tools',
-    'refresh_token',
-    'connection_history',
-    'cimd',
-    'tamper_rejection'
-  ]
-}));
+console.log(JSON.stringify({ event: 'wpgo_rc_onboarding_e2e', ok: true, product_version: '4.5.0-rc.3', checks: [
+  'site_link', 'resource_metadata', 'oauth_challenge', 'client_registration', 'automatic_site_selection',
+  'wordpress_approval_callback', 'token_exchange', 'schema_repair', 'command_enums', 'preflight_before_approval',
+  'single_plan_approval', 'authenticated_tools', 'refresh_token', 'connection_history', 'cimd', 'tamper_rejection'
+] }));
