@@ -36,6 +36,7 @@ add_action(
 			__DIR__ . '/includes/class-wpgo-connect-ai.php',
 			__DIR__ . '/includes/class-wpgo-agent-experience.php',
 			__DIR__ . '/includes/class-wpgo-theme-settings.php',
+			__DIR__ . '/includes/class-wpgo-media-abilities.php',
 		);
 		foreach ( $modules as $module ) {
 			if ( is_readable( $module ) ) {
