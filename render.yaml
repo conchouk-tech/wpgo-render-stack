@@ -71,13 +71,15 @@ services:
       - key: WPGO_REVOKED_LICENSE_IDS
         value: ""
       - key: WPGO_RELEASE_VERSION
-        value: "4.5.0-rc.1"
+        value: "4.5.0-rc.2"
       - key: WPGO_RELEASE_PACKAGE
         value: ""
       - key: WPGO_RELEASE_SHA256
         value: ""
       - key: WPGO_RELEASE_URL
         value: ""
+      - key: WPGO_RELEASE_CHANGELOG
+        value: "WPGo 4.5 RC2 commercial-readiness release."
       - key: PORT
         value: "10000"
 
