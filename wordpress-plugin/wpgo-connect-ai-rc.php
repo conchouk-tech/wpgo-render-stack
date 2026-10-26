@@ -15,10 +15,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'WPGO_CONNECT_AI_RC_VERSION', '4.5.0-rc.3' );
-define( 'WPGO_CONNECT_AI_RC_GATEWAY', 'https://wpgo-mcp-rc.onrender.com' );
+define( 'WPGO_CONNECT_AI_RC_GATEWAY', 'https://wpgo-mcp-rc3.onrender.com' );
 
 /*
- * The temporary RC companion is deliberately pinned to the isolated RC
+ * The temporary RC companion is deliberately pinned to the isolated RC3
  * gateway. The production WPGo core continues to use the production gateway.
  */
 add_filter(
