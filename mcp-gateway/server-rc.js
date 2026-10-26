@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { createMcpHandler, McpServer, fromJsonSchema } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createAuthCodeStore } from './state-store.js';
+import { createConnectionStore } from './connection-store.js';
 import {
   normalizeScope,
   normalizeSite,
@@ -29,7 +30,9 @@ const configuredBase = configuredBaseUrl ? configuredBaseUrl.toString().replace(
 const rawSecret = String(process.env.WPGO_MCP_SECRET || '');
 if (rawSecret.length < 32) throw new Error('WPGO_MCP_SECRET must be at least 32 characters.');
 const key = crypto.createHash('sha256').update(rawSecret).digest();
+const secretFingerprint = crypto.createHash('sha256').update(rawSecret).digest('base64url');
 const authCodes = await createAuthCodeStore();
+const connectionStore = await createConnectionStore({ secretFingerprint });
 const abilityCache = new Map();
 const ABILITY_CACHE_TTL_MS = 60_000;
 const ABILITY_CACHE_MAX_ENTRIES = 1000;
@@ -476,7 +479,7 @@ app.use(express.urlencoded({ extended: false, limit: '32kb' }));
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (req, res) => {
-  const ready = authCodes.ready();
+  const ready = authCodes.ready() && connectionStore.ready();
   return res.status(ready ? 200 : 503).json({
     ok: ready,
     service: 'wpgo-mcp-gateway',
@@ -485,6 +488,7 @@ app.get('/health', (req, res) => {
     mcp_url: legacyMcpUrl(req),
     oauth: true,
     oauth_code_store: authCodes.mode(),
+    connection_state_store: connectionStore.mode(),
     oauth_shared_state_required: authCodes.requiresShared(),
     protocols: ['2026-07-28', 'legacy-stateless'],
     wordpress_abilities: true,
@@ -506,9 +510,32 @@ app.get('/v1/connect/site-link', connectLimiter, async (req, res) => {
     site: check.site,
     site_name: check.site_name,
     mcp_url: mcpUrl,
+    status_url: `${baseUrl(req)}/v1/connect/status/${encodeURIComponent(createSiteToken(check.site, rawSecret))}`,
     connection_page: `${baseUrl(req)}/connect/wordpress?site=${encodeURIComponent(check.site)}`,
     request_id: req.id
   });
+});
+
+app.get('/v1/connect/status/:siteToken', connectLimiter, async (req, res) => {
+  const site = readSiteToken(req.params.siteToken, rawSecret);
+  if (!site) return res.status(404).json({ ok: false, status: 'invalid_site_link', request_id: req.id });
+  try {
+    const row = await connectionStore.getBySite(site);
+    if (!row) {
+      return res.json({ ok: true, site, status: 'not_connected', connected: false, request_id: req.id });
+    }
+    const refreshExpiry = row.refresh_expires_at ? Date.parse(row.refresh_expires_at) : 0;
+    const connected = row.status === 'connected' && (!refreshExpiry || refreshExpiry > Date.now());
+    return res.json({
+      ok: true, site, connected, status: connected ? 'connected' : row.status,
+      client_name: row.client_name || '', connected_at: row.connected_at || null,
+      last_refresh_at: row.last_refresh_at || null, last_seen_at: row.last_seen_at || null,
+      refresh_expires_at: row.refresh_expires_at || null, request_id: req.id
+    });
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'connection_status_error', request_id: req.id, message: String(error?.message || error).slice(0, 300) }));
+    return res.status(503).json({ ok: false, status: 'temporarily_unavailable', request_id: req.id });
+  }
 });
 
 app.get('/connect/wordpress', connectLimiter, async (req, res) => {
@@ -685,14 +712,12 @@ app.get('/oauth/wp/callback', oauthLimiter, async (req, res) => {
 app.post('/oauth/token', oauthLimiter, async (req, res) => {
   const issuer = baseUrl(req);
   const grant = String(req.body?.grant_type || '');
-  const clientId = String(req.body?.client_id || '');
-  const requestedResource = String(req.body?.resource || legacyMcpUrl(req));
-  const resourceInfo = validateResource(requestedResource, issuer);
+  const suppliedClientId = String(req.body?.client_id || '');
+  const suppliedResource = String(req.body?.resource || '');
   res.set('Cache-Control', 'no-store');
-  if (!clientId || clientId.length > 4096) return res.status(400).json({ error: 'invalid_client' });
-  if (!resourceInfo) return res.status(400).json({ error: 'invalid_target' });
 
   if (grant === 'authorization_code') {
+    if (!suppliedClientId || suppliedClientId.length > 4096) return res.status(400).json({ error: 'invalid_client' });
     const code = String(req.body?.code || '');
     const verifier = String(req.body?.code_verifier || '');
     const redirectUri = String(req.body?.redirect_uri || '');
@@ -703,26 +728,39 @@ app.post('/oauth/token', oauthLimiter, async (req, res) => {
     try { stored = await authCodes.take(code); }
     catch { return res.status(503).json({ error: 'temporarily_unavailable' }); }
     const row = stored?.payload ? unseal('wpgocode1', stored.payload) : null;
-    if (!row || stored.expiresAt < Date.now() || row.issuer !== issuer || row.resource !== resourceInfo.resource || row.client_id !== clientId || row.redirect_uri !== redirectUri) {
+    const targetResource = suppliedResource || row?.resource || '';
+    const resourceInfo = validateResource(targetResource, issuer);
+    if (!resourceInfo) return res.status(400).json({ error: 'invalid_target' });
+    if (!row || stored.expiresAt < Date.now() || row.issuer !== issuer || row.resource !== resourceInfo.resource || row.client_id !== suppliedClientId || row.redirect_uri !== redirectUri) {
+      console.warn(JSON.stringify({ event: 'oauth_token_rejected', grant, request_id: req.id, reason: 'authorization_code_binding' }));
       return res.status(400).json({ error: 'invalid_grant' });
     }
     const expected = crypto.createHash('sha256').update(verifier).digest('base64url');
     if (!secureEqual(expected, row.code_challenge)) return res.status(400).json({ error: 'invalid_grant' });
     const now = Math.floor(Date.now() / 1000);
+    const refreshExp = now + 86400 * 90;
     const base = {
       issuer,
-      client_id: clientId,
+      client_id: suppliedClientId,
+      client_name: String(row.client_name || 'MCP client').slice(0, 120),
       site_url: row.site,
       username: row.username,
       password: row.password,
       resource: resourceInfo.resource,
       scopes: ['mcp']
     };
+    const refreshToken = seal('wpgorefresh1', { ...base, iat: now, exp: refreshExp });
+    await connectionStore.record({
+      site: row.site, client_id: suppliedClientId, client_name: base.client_name, resource: resourceInfo.resource,
+      status: 'connected', connected_at: new Date().toISOString(),
+      refresh_expires_at: new Date(refreshExp * 1000).toISOString()
+    }).catch(error => console.error(JSON.stringify({ event: 'connection_state_record_error', request_id: req.id, message: String(error?.message || error).slice(0, 300) })));
+    console.log(JSON.stringify({ event: 'oauth_token_issued', request_id: req.id, site: row.site, client_name: base.client_name }));
     return res.json({
       access_token: seal('wpgoaccess1', { ...base, iat: now, exp: now + 3600 }),
       token_type: 'Bearer',
       expires_in: 3600,
-      refresh_token: seal('wpgorefresh1', { ...base, iat: now, exp: now + 86400 * 30 }),
+      refresh_token: refreshToken,
       scope: 'mcp'
     });
   }
@@ -730,15 +768,37 @@ app.post('/oauth/token', oauthLimiter, async (req, res) => {
   if (grant === 'refresh_token') {
     const refreshToken = String(req.body?.refresh_token || '');
     const row = unseal('wpgorefresh1', refreshToken);
-    if (!row || row.issuer !== issuer || row.resource !== resourceInfo.resource || row.client_id !== clientId || !Array.isArray(row.scopes) || !row.scopes.includes('mcp')) {
+    if (!row) {
+      console.warn(JSON.stringify({ event: 'oauth_token_rejected', grant, request_id: req.id, reason: 'invalid_or_expired_refresh_token' }));
+      return res.status(400).json({ error: 'invalid_grant' });
+    }
+    if (suppliedClientId && (suppliedClientId.length > 4096 || row.client_id !== suppliedClientId)) {
+      console.warn(JSON.stringify({ event: 'oauth_token_rejected', grant, request_id: req.id, reason: 'client_binding' }));
+      return res.status(400).json({ error: 'invalid_grant' });
+    }
+    const targetResource = suppliedResource || row.resource || '';
+    const resourceInfo = validateResource(targetResource, issuer);
+    if (!resourceInfo || row.issuer !== issuer || row.resource !== resourceInfo.resource || !Array.isArray(row.scopes) || !row.scopes.includes('mcp')) {
+      console.warn(JSON.stringify({ event: 'oauth_token_rejected', grant, request_id: req.id, reason: 'resource_or_scope_binding' }));
       return res.status(400).json({ error: 'invalid_grant' });
     }
     const now = Math.floor(Date.now() / 1000);
+    const refreshExp = now + 86400 * 90;
+    const base = { ...row, client_id: row.client_id, resource: resourceInfo.resource };
+    delete base.iat;
+    delete base.exp;
+    const rotatedRefresh = seal('wpgorefresh1', { ...base, iat: now, exp: refreshExp });
+    await connectionStore.record({
+      site: row.site_url, client_id: row.client_id, client_name: row.client_name || 'MCP client', resource: resourceInfo.resource,
+      status: 'connected', last_refresh_at: new Date().toISOString(),
+      refresh_expires_at: new Date(refreshExp * 1000).toISOString()
+    }).catch(error => console.error(JSON.stringify({ event: 'connection_state_record_error', request_id: req.id, message: String(error?.message || error).slice(0, 300) })));
+    console.log(JSON.stringify({ event: 'oauth_token_refreshed', request_id: req.id, site: row.site_url, client_name: String(row.client_name || 'MCP client').slice(0, 120), client_id_supplied: Boolean(suppliedClientId), resource_supplied: Boolean(suppliedResource) }));
     return res.json({
-      access_token: seal('wpgoaccess1', { ...row, iat: now, exp: now + 3600 }),
+      access_token: seal('wpgoaccess1', { ...base, iat: now, exp: now + 3600 }),
       token_type: 'Bearer',
       expires_in: 3600,
-      refresh_token: refreshToken,
+      refresh_token: rotatedRefresh,
       scope: 'mcp'
     });
   }
@@ -774,6 +834,10 @@ async function mcpAuth(req, res, next) {
     resource: new URL(resourceInfo.resource),
     resourceMetadataUrl: new URL(metadata)
   };
+  void connectionStore.record({
+    site: row.site_url, client_id: row.client_id, client_name: row.client_name || 'MCP client', resource: resourceInfo.resource,
+    status: 'connected', last_seen_at: new Date().toISOString()
+  }).catch(error => console.error(JSON.stringify({ event: 'connection_state_record_error', request_id: req.id, message: String(error?.message || error).slice(0, 300) })));
   return next();
 }
 
@@ -805,7 +869,7 @@ async function shutdown(signal) {
   shuttingDown = true;
   console.log(JSON.stringify({ event: 'gateway_shutdown', signal }));
   httpServer.close(async () => {
-    await authCodes.close();
+    await Promise.allSettled([authCodes.close(), connectionStore.close()]);
     process.exit(0);
   });
   setTimeout(() => process.exit(1), 10_000).unref();

@@ -121,11 +121,12 @@ assert.match(tools.text, /wpgo__create-draft-post/);
 assert.match(tools.text, /wpgo__approval_status/);
 
 console.log('RC E2E: validating refresh-token rotation path');
+// Deliberately omit client_id and resource. Public OAuth clients are allowed to
+// rely on the bindings already carried by the refresh token, and WPGo must not
+// force a needless reconnect after an access token expires.
 const refreshBody = new URLSearchParams({
   grant_type: 'refresh_token',
-  refresh_token: token.data.refresh_token,
-  client_id: clientId,
-  resource: mcpUrl
+  refresh_token: token.data.refresh_token
 });
 const refreshed = await request(`${gateway}/oauth/token`, {
   method: 'POST',
@@ -134,6 +135,8 @@ const refreshed = await request(`${gateway}/oauth/token`, {
 });
 assert.equal(refreshed.response.status, 200, refreshed.text);
 assert.ok(refreshed.data?.access_token);
+assert.ok(refreshed.data?.refresh_token);
+assert.notEqual(refreshed.data.refresh_token, token.data.refresh_token);
 
 console.log('RC E2E: rejecting a tampered site connector URL');
 const siteToken = decodeURIComponent(mcpPath.split('/').pop());

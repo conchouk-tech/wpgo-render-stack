@@ -120,9 +120,30 @@ final class WPGo_Connect_AI {
 			);
 		}
 
+		$status_url = esc_url_raw( isset( $body['status_url'] ) ? $body['status_url'] : '' );
+		$ai_status  = array( 'status' => 'not_connected', 'connected' => false );
+		if ( ! empty( $status_url ) ) {
+			$status_response = wp_remote_get( $status_url, array( 'timeout' => 8, 'redirection' => 0, 'headers' => array( 'Accept' => 'application/json', 'User-Agent' => 'WPGo-WordPress/' . self::VERSION ) ) );
+			if ( ! is_wp_error( $status_response ) && 200 === (int) wp_remote_retrieve_response_code( $status_response ) ) {
+				$status_body = json_decode( wp_remote_retrieve_body( $status_response ), true );
+				if ( is_array( $status_body ) ) {
+					$ai_status = array(
+						'status'          => sanitize_key( isset( $status_body['status'] ) ? $status_body['status'] : 'not_connected' ),
+						'connected'       => ! empty( $status_body['connected'] ),
+						'client_name'     => sanitize_text_field( isset( $status_body['client_name'] ) ? $status_body['client_name'] : '' ),
+						'connected_at'    => sanitize_text_field( isset( $status_body['connected_at'] ) ? $status_body['connected_at'] : '' ),
+						'last_refresh_at' => sanitize_text_field( isset( $status_body['last_refresh_at'] ) ? $status_body['last_refresh_at'] : '' ),
+						'last_seen_at'    => sanitize_text_field( isset( $status_body['last_seen_at'] ) ? $status_body['last_seen_at'] : '' ),
+					);
+				}
+			}
+		}
+
 		return $this->connection = array(
 			'ok'              => true,
 			'mcp_url'         => esc_url_raw( isset( $body['mcp_url'] ) ? $body['mcp_url'] : '' ),
+			'status_url'      => $status_url,
+			'ai_status'       => $ai_status,
 			'connection_page' => esc_url_raw( isset( $body['connection_page'] ) ? $body['connection_page'] : '' ),
 			'site_name'       => sanitize_text_field( isset( $body['site_name'] ) ? $body['site_name'] : get_bloginfo( 'name' ) ),
 			'request_id'      => sanitize_text_field( isset( $body['request_id'] ) ? $body['request_id'] : '' ),
@@ -203,8 +224,14 @@ final class WPGo_Connect_AI {
 			return;
 		}
 
-		$mcp_url = $connection['mcp_url'];
-		echo '<div class="wpgo-status"><strong class="wpgo-ok">✓ ' . esc_html__( 'Site ready for AI connection', 'wpgo' ) . '</strong><br><span class="wpgo-note">' . esc_html( $site_name ) . ' · ' . esc_html( $this->site_url() ) . '</span></div>';
+		$mcp_url   = $connection['mcp_url'];
+		$ai_status = isset( $connection['ai_status'] ) && is_array( $connection['ai_status'] ) ? $connection['ai_status'] : array();
+		if ( ! empty( $ai_status['connected'] ) ) {
+			$client_name = ! empty( $ai_status['client_name'] ) ? $ai_status['client_name'] : __( 'AI client', 'wpgo' );
+			echo '<div class="wpgo-status"><strong class="wpgo-ok">✓ ' . esc_html( sprintf( __( '%s connected', 'wpgo' ), $client_name ) ) . '</strong><br><span class="wpgo-note">' . esc_html__( 'WPGo has verified the OAuth token exchange with the AI client.', 'wpgo' ) . '</span></div>';
+		} else {
+			echo '<div class="wpgo-status"><strong>' . esc_html__( 'WordPress ready — AI connection not yet verified', 'wpgo' ) . '</strong><br><span class="wpgo-note">' . esc_html__( 'This site is ready to connect, but WPGo has not yet seen a completed OAuth token exchange from Claude, ChatGPT or another AI client. WordPress readiness alone does not mean the AI is connected.', 'wpgo' ) . '</span></div>';
+		}
 		echo '<div class="wpgo-grid">';
 		$this->render_provider_card(
 			'Claude',
