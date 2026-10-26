@@ -23,7 +23,7 @@ jobs:
         with:
           php-version: '8.0'
           coverage: none
-      - name: Escape target-code template expressions in generator
+      - name: Prepare deterministic RC2 generator
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -39,6 +39,10 @@ jobs:
           }
           for before, after in replacements.items():
               text = text.replace(before, after)
+          text = text.replace(
+              '    "    max_concurrency: maxConcurrency",\n    "    max_concurrency: maxConcurrency,\\n    screenshot: true,\\n    site_audit: true",',
+              '    "    max_concurrency: maxConcurrency,\\n    network_policy: \'public-only\',",\n    "    max_concurrency: maxConcurrency,\\n    screenshot: true,\\n    site_audit: true,\\n    network_policy: \'public-only\',",'
+          )
           path.write_text(text)
           PY
       - name: Apply RC2 product upgrade
