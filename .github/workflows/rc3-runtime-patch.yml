@@ -1,0 +1,43 @@
+name: WPGo RC3 runtime patch
+
+on:
+  push:
+    branches:
+      - release/wpgo-4.5.0-rc3
+
+permissions:
+  contents: write
+
+jobs:
+  patch-runtime:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/wpgo-4.5.0-rc3
+      - name: Apply idempotent RC3 runtime metadata patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('mcp-gateway/server-rc.js')
+          text = path.read_text()
+          text = text.replace("const VERSION = '1.4.1-rc.2';", "const VERSION = '1.4.2-rc.3';")
+          text = text.replace("const PRODUCT_VERSION = '4.5.0-rc.2';", "const PRODUCT_VERSION = '4.5.0-rc.3';")
+          marker = "    connection_history: true\n"
+          replacement = "    connection_history: true,\n    agent_preflight: true,\n    schema_guard: true\n"
+          if marker in text:
+              text = text.replace(marker, replacement, 1)
+          path.write_text(text)
+          PY
+      - name: Commit runtime patch if needed
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mcp-gateway/server-rc.js
+          if git diff --cached --quiet; then
+            echo 'RC3 runtime metadata already current.'
+            exit 0
+          fi
+          git commit -m 'Promote gateway runtime metadata to WPGo 4.5 RC3'
+          git push origin HEAD:release/wpgo-4.5.0-rc3
