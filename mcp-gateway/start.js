@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import './outbound-guard.js';
+import './agent-experience-proxy.js';
 import { resourceForSite } from './site-link.js';
 import './server-rc.js';
 
@@ -21,12 +22,13 @@ async function selfTest() {
   try {
     const health = await request(`${local}/health`);
     checks.health = health.ok && health.data?.ok === true;
-    checks.version = health.data?.version === '1.4.1-rc.2' && health.data?.product_version === '4.5.0-rc.2';
+    checks.version = health.data?.version === '1.4.2-rc.3' && health.data?.product_version === '4.5.0-rc.3';
     checks.shared_state = health.data?.oauth_shared_state_required
       ? health.data?.oauth_code_store === 'redis'
       : true;
     checks.approval_proxy = health.data?.approval_proxy === true;
     checks.wordpress_first = health.data?.wordpress_first_onboarding === true && health.data?.site_specific_mcp_urls === true;
+    checks.agent_preflight = health.data?.agent_preflight === true && health.data?.schema_guard === true;
 
     const protectedResource = await request(`${local}/.well-known/oauth-protected-resource/mcp`);
     checks.resource_metadata =
@@ -141,6 +143,7 @@ async function selfTest() {
     'shared_state',
     'approval_proxy',
     'wordpress_first',
+    'agent_preflight',
     'resource_metadata',
     'site_resource_metadata',
     'site_mcp_oauth_challenge',
@@ -153,7 +156,7 @@ async function selfTest() {
   ];
   console.log(JSON.stringify({
     event: 'wpgo_mcp_self_test',
-    version: '4.5.0-rc.2',
+    version: '4.5.0-rc.3',
     ok: required.every(check => checks[check] === true),
     checks
   }));
