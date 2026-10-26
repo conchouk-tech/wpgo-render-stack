@@ -23,6 +23,24 @@ jobs:
         with:
           php-version: '8.0'
           coverage: none
+      - name: Escape target-code template expressions in generator
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply-rc2-commercialization.mjs')
+          text = path.read_text()
+          replacements = {
+              '${origin}/client-metadata.json': r'\${origin}/client-metadata.json',
+              '${gateway}/oauth/authorize': r'\${gateway}/oauth/authorize',
+              '${new URL(site).origin}/client-metadata.json': r'\${new URL(site).origin}/client-metadata.json',
+              '${mcpGateway}${urlOrPath}': r'\${mcpGateway}\${urlOrPath}',
+              '${encodeURIComponent(siteUrl)}': r'\${encodeURIComponent(siteUrl)}',
+              '${encodeURIComponent(site.site_url)}': r'\${encodeURIComponent(site.site_url)}',
+          }
+          for before, after in replacements.items():
+              text = text.replace(before, after)
+          path.write_text(text)
+          PY
       - name: Apply RC2 product upgrade
         run: node scripts/apply-rc2-commercialization.mjs
       - name: Refresh changed dependency lockfiles
