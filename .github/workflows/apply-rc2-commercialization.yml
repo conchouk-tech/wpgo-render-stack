@@ -1,0 +1,54 @@
+name: Apply WPGo RC2 commercialization
+
+on:
+  push:
+    branches:
+      - release/wpgo-4.5.0-rc2
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/wpgo-4.5.0-rc2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0'
+          coverage: none
+      - name: Apply RC2 product upgrade
+        run: node scripts/apply-rc2-commercialization.mjs
+      - name: Refresh changed dependency lockfiles
+        run: |
+          (cd commercial-api && npm install --package-lock-only --ignore-scripts)
+          (cd mcp-gateway && npm install --package-lock-only --ignore-scripts)
+      - name: Validate upgraded sources
+        run: |
+          node --check commercial-api/server-v3.js
+          node --check commercial-api/billing-lifecycle.js
+          node --test commercial-api/billing-lifecycle.test.js
+          node --check mcp-gateway/server-rc.js
+          node --check mcp-gateway/connection-store.js
+          node --check mcp-gateway/rc-onboarding.e2e.js
+          node --check portal/app6.js
+          node --check renderer/server.js
+          php -l wordpress-plugin/wpgo-connect-ai-rc.php
+          php -l wordpress-plugin/includes/class-wpgo-connect-ai.php
+      - name: Commit RC2 upgrade
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add commercial-api mcp-gateway portal/app6.js renderer/server.js wordpress-plugin render.yaml
+          if git diff --cached --quiet; then
+            echo 'RC2 upgrade already applied.'
+            exit 0
+          fi
+          git commit -m 'Build WPGo 4.5 RC2 commercial readiness upgrade'
+          git push origin HEAD:release/wpgo-4.5.0-rc2
