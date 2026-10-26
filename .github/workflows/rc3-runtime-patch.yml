@@ -16,28 +16,56 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: release/wpgo-4.5.0-rc3
-      - name: Apply idempotent RC3 runtime metadata patch
+      - name: Apply idempotent RC3 runtime patches
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('mcp-gateway/server-rc.js')
-          text = path.read_text()
+
+          gateway = Path('mcp-gateway/server-rc.js')
+          text = gateway.read_text()
           text = text.replace("const VERSION = '1.4.1-rc.2';", "const VERSION = '1.4.2-rc.3';")
           text = text.replace("const PRODUCT_VERSION = '4.5.0-rc.2';", "const PRODUCT_VERSION = '4.5.0-rc.3';")
           marker = "    connection_history: true\n"
           replacement = "    connection_history: true,\n    agent_preflight: true,\n    schema_guard: true\n"
           if marker in text:
               text = text.replace(marker, replacement, 1)
-          path.write_text(text)
+          gateway.write_text(text)
+
+          renderer = Path('renderer/server.js')
+          text = renderer.read_text()
+          text = text.replace("const VERSION = '4.4.0-rc.2';", "const VERSION = '4.4.1-rc.3';")
+          concurrency = "const maxConcurrency = Math.max(1, Math.min(12, Number(process.env.WPGO_RENDER_MAX_CONCURRENCY || 3)));\n"
+          viewports = """const maxConcurrency = Math.max(1, Math.min(12, Number(process.env.WPGO_RENDER_MAX_CONCURRENCY || 3)));
+const VIEWPORTS = Object.freeze({
+  desktop: { width: 1440, height: 900, isMobile: false, hasTouch: false },
+  tablet: { width: 820, height: 1180, isMobile: false, hasTouch: true },
+  mobile: { width: 390, height: 844, isMobile: true, hasTouch: true }
+});
+"""
+          if concurrency in text and 'const VIEWPORTS = Object.freeze' not in text:
+              text = text.replace(concurrency, viewports, 1)
+          health = "    site_audit: true,\n"
+          if health in text and 'viewport_presets:' not in text:
+              text = text.replace(health, health + "    viewport_presets: Object.keys(VIEWPORTS),\n", 1)
+          audit_input = "  const fullPage = req.body?.full_page === true;\n"
+          if audit_input in text and 'const viewportName =' not in text:
+              text = text.replace(audit_input, audit_input + "  const viewportName = ['desktop', 'tablet', 'mobile'].includes(String(req.body?.viewport || 'desktop')) ? String(req.body?.viewport || 'desktop') : 'desktop';\n  const viewport = VIEWPORTS[viewportName];\n", 1)
+          hardcoded = "      viewport: { width: 1365, height: 768 }\n"
+          if hardcoded in text:
+              text = text.replace(hardcoded, "      viewport: { width: viewport.width, height: viewport.height },\n      isMobile: viewport.isMobile,\n      hasTouch: viewport.hasTouch\n", 1)
+          result = "      ok: true, request_id: requestId, final_url: finalUrl, http_status: response?.status() || 0,\n"
+          if result in text and 'viewport: viewportName' not in text:
+              text = text.replace(result, "      ok: true, request_id: requestId, final_url: finalUrl, http_status: response?.status() || 0,\n      viewport: viewportName, viewport_size: { width: viewport.width, height: viewport.height },\n", 1)
+          renderer.write_text(text)
           PY
-      - name: Commit runtime patch if needed
+      - name: Commit runtime patches if needed
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add mcp-gateway/server-rc.js
+          git add mcp-gateway/server-rc.js renderer/server.js
           if git diff --cached --quiet; then
-            echo 'RC3 runtime metadata already current.'
+            echo 'RC3 runtime patches already current.'
             exit 0
           fi
-          git commit -m 'Promote gateway runtime metadata to WPGo 4.5 RC3'
+          git commit -m 'Apply WPGo 4.5 RC3 runtime and responsive audit patches'
           git push origin HEAD:release/wpgo-4.5.0-rc3
