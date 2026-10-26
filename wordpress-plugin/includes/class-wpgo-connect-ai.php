@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class WPGo_Connect_AI {
-	const VERSION = '4.5.0-rc.2';
+	const VERSION = '4.5.0-rc.3';
 	const DEFAULT_GATEWAY = 'https://wpgo-mcp-ga.onrender.com';
 	const PAGE_SLUG = 'wpgo-connect-ai';
 

@@ -145,6 +145,10 @@ final class WPGo_Agent_Experience_RC3 {
 		$manifest = self::manifest();
 		$input    = is_array( $input ) ? $input : array();
 
+		if ( 'wpgo/upload-media-from-url' === $name && class_exists( 'WPGo_Media_Abilities_RC3' ) ) {
+			return WPGo_Media_Abilities_RC3::preflight_remote_url( $input['url'] ?? '' );
+		}
+
 		if ( 'wpgo/command-read' === $name || 'wpgo/command-write' === $name ) {
 			$command = (string) ( $input['command'] ?? '' );
 			$valid   = 'wpgo/command-read' === $name ? $manifest['read'] : $manifest['write'];
@@ -237,6 +241,9 @@ final class WPGo_Agent_Experience_RC3 {
 			'wpgo/elementor-edit'                    => 'Edit Elementor content',
 			'wpgo/structured-builder-node-edit'      => 'Edit one structured builder node',
 			'wpgo/structured-builder-batch-edit'     => 'Apply a structured builder edit plan',
+			'wpgo/upload-media-from-url'             => 'Upload one media file from a validated public HTTPS URL',
+			'wpgo/request-media-upload'              => 'Create a short-lived local-device media upload session',
+			'wpgo/theme-setting-update'              => 'Update one reviewed safe theme setting',
 		);
 		if ( isset( $labels[ $name ] ) ) {
 			return $labels[ $name ];

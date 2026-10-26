@@ -5,7 +5,7 @@ import net from 'node:net';
 import crypto from 'node:crypto';
 
 const app = express();
-const VERSION = '4.4.0-rc.2';
+const VERSION = '4.4.1-rc.3';
 const production = process.env.NODE_ENV === 'production';
 const port = Number(process.env.PORT || 8080);
 const token = String(process.env.WPGO_RENDER_TOKEN || '');
@@ -25,6 +25,11 @@ const allowedPorts = new Set(
     .filter(value => Number.isInteger(value) && value > 0 && value <= 65535)
 );
 const maxConcurrency = Math.max(1, Math.min(12, Number(process.env.WPGO_RENDER_MAX_CONCURRENCY || 3)));
+const VIEWPORTS = Object.freeze({
+  desktop: { width: 1440, height: 900, isMobile: false, hasTouch: false },
+  tablet: { width: 820, height: 1180, isMobile: false, hasTouch: true },
+  mobile: { width: 390, height: 844, isMobile: true, hasTouch: true }
+});
 const maxDnsCacheEntries = Math.max(100, Math.min(20_000, Number(process.env.WPGO_RENDER_DNS_CACHE_MAX || 5000)));
 const dnsCache = new Map();
 let active = 0;
@@ -202,6 +207,7 @@ app.get('/health', (_req, res) => {
     max_concurrency: maxConcurrency,
     screenshot: true,
     site_audit: true,
+    viewport_presets: Object.keys(VIEWPORTS),
     network_policy: 'public-only',
     error: browserReady ? '' : browserStartupError
   });
@@ -298,6 +304,8 @@ app.post('/v1/site-audit', renderLimiter, async (req, res) => {
   const waitMs = Math.max(0, Math.min(5000, Number(req.body?.wait_ms || 800)));
   const includeScreenshot = req.body?.screenshot === true;
   const fullPage = req.body?.full_page === true;
+  const viewportName = ['desktop', 'tablet', 'mobile'].includes(String(req.body?.viewport || 'desktop')) ? String(req.body?.viewport || 'desktop') : 'desktop';
+  const viewport = VIEWPORTS[viewportName];
   const started = Date.now();
   active += 1;
   let context;
@@ -305,7 +313,9 @@ app.post('/v1/site-audit', renderLimiter, async (req, res) => {
     const currentBrowser = await getBrowser();
     context = await currentBrowser.newContext({
       javaScriptEnabled: true, ignoreHTTPSErrors: false, serviceWorkers: 'block',
-      viewport: { width: 1365, height: 768 }
+      viewport: { width: viewport.width, height: viewport.height },
+      isMobile: viewport.isMobile,
+      hasTouch: viewport.hasTouch
     });
     const page = await context.newPage();
     const consoleErrors = [];
@@ -344,6 +354,7 @@ app.post('/v1/site-audit', renderLimiter, async (req, res) => {
       : '';
     return res.json({
       ok: true, request_id: requestId, final_url: finalUrl, http_status: response?.status() || 0,
+      viewport: viewportName, viewport_size: { width: viewport.width, height: viewport.height },
       ...audit, console_errors: consoleErrors, screenshot_png_base64: screenshotBase64,
       timings: { total_ms: Date.now() - started }
     });
