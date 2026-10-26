@@ -1,0 +1,40 @@
+name: Apply WPGo RC connection resilience
+
+on:
+  push:
+    branches:
+      - release/wpgo-4.5.0-rc1
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/wpgo-4.5.0-rc1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply deterministic resilience patch
+        run: node scripts/apply-rc-connection-resilience.mjs
+      - name: Validate patched source before commit
+        run: |
+          node --check mcp-gateway/server-rc.js
+          node --check mcp-gateway/connection-store.js
+          node --check mcp-gateway/rc-onboarding.e2e.js
+          php -l wordpress-plugin/includes/class-wpgo-connect-ai.php
+      - name: Commit patched RC sources
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mcp-gateway/server-rc.js mcp-gateway/rc-onboarding.e2e.js wordpress-plugin/includes/class-wpgo-connect-ai.php
+          if git diff --cached --quiet; then
+            echo 'Connection resilience patch already applied.'
+            exit 0
+          fi
+          git commit -m 'Fix persistent AI connection and OAuth refresh resilience'
+          git push origin HEAD:release/wpgo-4.5.0-rc1
