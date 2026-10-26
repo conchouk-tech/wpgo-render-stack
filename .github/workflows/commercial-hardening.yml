@@ -12,6 +12,59 @@ permissions:
   contents: read
 
 jobs:
+  production-blueprint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject free or ephemeral production connection infrastructure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          text = Path('render.yaml').read_text()
+
+          def block_after(marker, until='\n  - type:'):
+              start = text.find(marker)
+              if start < 0:
+                  raise SystemExit(f'missing blueprint resource: {marker}')
+              end = text.find(until, start + len(marker))
+              if end < 0:
+                  end = len(text)
+              return text[start:end]
+
+          critical = [
+              'name: wpgo-mcp-ga',
+              'name: wpgo-commercial-web',
+              'name: wpgo-commercial-api',
+              'name: wpgo-control-plane-ga',
+          ]
+          for marker in critical:
+              block = block_after(marker)
+              if re.search(r'(?m)^\s*plan:\s*free\s*$', block):
+                  raise SystemExit(f'{marker} must not use Render free compute in the production blueprint')
+
+          kv = block_after('name: wpgo-mcp-state')
+          if re.search(r'(?m)^\s*plan:\s*free\s*$', kv):
+              raise SystemExit('wpgo-mcp-state must use persistent paid Key Value')
+          if not re.search(r'(?m)^\s*persistenceMode:\s*journal-snapshot\s*$', kv):
+              raise SystemExit('wpgo-mcp-state must use journal-snapshot persistence')
+
+          db_start = text.find('name: wpgo-commercial-db')
+          if db_start < 0:
+              raise SystemExit('missing wpgo-commercial-db')
+          db = text[db_start:]
+          if re.search(r'(?m)^\s*plan:\s*free\s*$', db):
+              raise SystemExit('wpgo-commercial-db must not use the expiring Render free database')
+
+          mcp = block_after('name: wpgo-mcp-ga')
+          for required in ('WPGO_MCP_SECRET', 'WPGO_REQUIRE_SHARED_OAUTH_STATE', 'REDIS_URL'):
+              if required not in mcp:
+                  raise SystemExit(f'wpgo-mcp-ga missing {required}')
+
+          print('Production blueprint persistence/always-on gate passed.')
+          PY
+
   mcp-gateway:
     runs-on: ubuntu-latest
     defaults:
@@ -23,8 +76,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: mcp-gateway/package.json
-      - run: npm install --ignore-scripts
+          cache-dependency-path: mcp-gateway/package-lock.json
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - name: Full WordPress-first OAuth and MCP integration test
         env:
@@ -124,8 +177,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: commercial-api/package.json
-      - run: npm install --ignore-scripts
+          cache-dependency-path: commercial-api/package-lock.json
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - name: Database and API startup smoke test
         env:
@@ -162,8 +215,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: control-plane/package.json
-      - run: npm install --ignore-scripts
+          cache-dependency-path: control-plane/package-lock.json
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - name: Signed licence issue and validate smoke test
         env:
@@ -208,8 +261,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: portal/package.json
-      - run: npm install --ignore-scripts
+          cache-dependency-path: portal/package-lock.json
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - name: Production startup smoke test
         env:
@@ -241,4 +294,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: renderer/package-lock.json
+      - run: npm ci --ignore-scripts
       - run: npm run check
