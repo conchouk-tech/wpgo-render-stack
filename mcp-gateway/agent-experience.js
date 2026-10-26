@@ -34,23 +34,52 @@ export function editDistance(a, b) {
   return row[right.length];
 }
 
+function commandTokens(value) {
+  return String(value || '')
+    .toLowerCase()
+    .split(/[._:/-]+/)
+    .map(token => token.trim())
+    .filter(Boolean);
+}
+
 export function nearestCommand(input, candidates) {
   const needle = String(input || '').trim();
   const list = uniqueStrings(candidates);
   if (!needle || !list.length) return '';
+
+  const needleTokens = commandTokens(needle);
   let best = '';
   let bestScore = Number.POSITIVE_INFINITY;
+  let bestSharedTokens = 0;
+
   for (const candidate of list) {
-    const distance = editDistance(needle, candidate);
-    const prefixBonus = candidate.split('.').at(0) === needle.split('.').at(0) ? -0.75 : 0;
-    const score = distance + prefixBonus;
-    if (score < bestScore) {
+    const candidateTokens = commandTokens(candidate);
+    const sharedTokens = needleTokens.filter(token => candidateTokens.includes(token)).length;
+    const sameNamespace = candidateTokens[0] && candidateTokens[0] === needleTokens[0];
+    const distance = editDistance(needle.toLowerCase(), candidate.toLowerCase());
+
+    // Agents often remember the semantic pieces of a command but use the wrong
+    // separators/order (for example menu.item.add vs menu.add-post). Reward
+    // shared command tokens heavily while still using edit distance to avoid
+    // unrelated suggestions.
+    const tokenBonus = sharedTokens * 2;
+    const namespaceBonus = sameNamespace ? 1.5 : 0;
+    const score = distance - tokenBonus - namespaceBonus;
+
+    if (
+      score < bestScore ||
+      (score === bestScore && sharedTokens > bestSharedTokens) ||
+      (score === bestScore && sharedTokens === bestSharedTokens && candidate.length < best.length)
+    ) {
       best = candidate;
       bestScore = score;
+      bestSharedTokens = sharedTokens;
     }
   }
+
   const threshold = Math.max(3, Math.ceil(needle.length * 0.45));
-  return bestScore <= threshold ? best : '';
+  const enoughSemanticOverlap = bestSharedTokens >= 2 && commandTokens(best)[0] === needleTokens[0];
+  return bestScore <= threshold || enoughSemanticOverlap ? best : '';
 }
 
 function commandError(command, validCommands, path = 'command') {
