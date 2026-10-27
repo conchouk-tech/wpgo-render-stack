@@ -1,0 +1,88 @@
+name: WPGo renderer integration
+
+on:
+  push:
+    branches:
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  site-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: renderer
+    env:
+      NODE_ENV: production
+      PORT: '8082'
+      WPGO_RENDER_TOKEN: ci-only-render-token-value-not-for-production-use
+      WPGO_RENDER_ALLOW_ANY_PUBLIC: '1'
+      WPGO_RENDER_MAX_CONCURRENCY: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: renderer/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - name: Install Chromium for isolated renderer test
+        run: npx playwright install --with-deps chromium
+      - name: Start renderer
+        run: |
+          npm start >/tmp/wpgo-renderer.log 2>&1 &
+          echo $! > /tmp/wpgo-renderer.pid
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:8082/health >/tmp/wpgo-renderer-health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/wpgo-renderer.log
+          exit 1
+      - name: Audit public HTTPS page at desktop tablet and mobile widths
+        run: |
+          node --input-type=module <<'NODE'
+          const expected = {
+            desktop: { width: 1440, height: 900 },
+            tablet: { width: 820, height: 1180 },
+            mobile: { width: 390, height: 844 }
+          };
+          for (const [viewport, dimensions] of Object.entries(expected)) {
+            const response = await fetch('http://127.0.0.1:8082/v1/site-audit', {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                authorization: `Bearer ${process.env.WPGO_RENDER_TOKEN}`
+              },
+              body: JSON.stringify({ url: 'https://example.com/', wait_ms: 0, screenshot: viewport === 'mobile', viewport })
+            });
+            const body = await response.json();
+            if (!response.ok || !body.ok) throw new Error(`${viewport} site audit failed: ${JSON.stringify(body)}`);
+            if (body.viewport !== viewport) throw new Error(`${viewport} preset not applied`);
+            if (body.viewport_size?.width !== dimensions.width || body.viewport_size?.height !== dimensions.height) throw new Error(`${viewport} dimensions mismatch`);
+            if (!String(body.final_url || '').startsWith('https://example.com')) throw new Error('Unexpected final URL');
+            if (!String(body.title || '').toLowerCase().includes('example')) throw new Error('Rendered title missing');
+            if (!Array.isArray(body.headings) || !Number.isInteger(body.h1_count)) throw new Error('Audit structure missing');
+            if (!body.timings || typeof body.timings.total_ms !== 'number') throw new Error('Audit timing missing');
+            if (viewport === 'mobile' && !body.screenshot_png_base64) throw new Error('Mobile screenshot missing');
+          }
+          NODE
+      - name: Reject unauthorized audit request
+        run: |
+          code=$(curl -sS -o /tmp/unauthorized.json -w '%{http_code}' \
+            -H 'content-type: application/json' \
+            -d '{"url":"https://example.com/"}' \
+            http://127.0.0.1:8082/v1/site-audit)
+          test "$code" = '401'
+      - name: Stop renderer
+        if: always()
+        run: |
+          kill "$(cat /tmp/wpgo-renderer.pid 2>/dev/null)" 2>/dev/null || true
+          tail -n 100 /tmp/wpgo-renderer.log || true
