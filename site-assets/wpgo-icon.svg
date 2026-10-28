@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">WPGo icon</title>
+  <desc id="desc">WPGo chat bubble and lightning icon.</desc>
+  <defs>
+    <linearGradient id="bubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#123ccf"/>
+      <stop offset="0.55" stop-color="#087ef1"/>
+      <stop offset="1" stop-color="#08c0e8"/>
+    </linearGradient>
+  </defs>
+  <circle cx="27" cy="119" r="12" fill="#10c9cf"/>
+  <rect x="45" y="72" width="104" height="22" rx="11" fill="#14c5c9"/>
+  <rect x="41" y="107" width="127" height="23" rx="11.5" fill="#0ca7e8"/>
+  <rect x="64" y="143" width="106" height="22" rx="11" fill="#0a71ed"/>
+  <path d="M120 39h61c40 0 67 27 67 67v48c0 37-24 63-60 67l-31 30v-30h-37c-36 0-60-22-64-55h40l44-63H91c2-38 26-64 29-64Z" fill="url(#bubble)"/>
+  <path d="M170 78l-44 63h38l-20 47 59-74h-38l27-36Z" fill="#fff"/>
+</svg>
