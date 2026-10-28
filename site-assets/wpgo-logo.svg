@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 240" role="img" aria-labelledby="title desc">
+  <title id="title">WPGo</title>
+  <desc id="desc">WPGo logo with a blue chat bubble, speed lines and lightning bolt.</desc>
+  <defs>
+    <linearGradient id="bubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#123ccf"/>
+      <stop offset="0.55" stop-color="#087ef1"/>
+      <stop offset="1" stop-color="#08c0e8"/>
+    </linearGradient>
+    <linearGradient id="go" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1950e6"/>
+      <stop offset="0.55" stop-color="#0b8bf1"/>
+      <stop offset="1" stop-color="#11c7db"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(12 24)">
+    <circle cx="26" cy="104" r="12" fill="#10c9cf"/>
+    <rect x="44" y="57" width="116" height="23" rx="11.5" fill="#14c5c9"/>
+    <rect x="40" y="92" width="142" height="24" rx="12" fill="#0ca7e8"/>
+    <rect x="64" y="128" width="116" height="23" rx="11.5" fill="#0a71ed"/>
+    <path d="M126 24h92c43 0 72 29 72 72v59c0 40-26 68-65 72l-35 34v-34h-64c-39 0-66-23-70-59l52-1 48-69H101c2-43 29-74 25-74Z" fill="url(#bubble)"/>
+    <path d="M180 68 132 137h41l-22 51 65-81h-42l30-39Z" fill="#fff"/>
+  </g>
+  <g font-family="Inter, Arial, Helvetica, sans-serif" font-weight="800">
+    <text x="330" y="165" font-size="126" fill="#102a54" letter-spacing="-4">WP</text>
+    <text x="563" y="165" font-size="126" fill="url(#go)" letter-spacing="-5">Go</text>
+  </g>
+</svg>
