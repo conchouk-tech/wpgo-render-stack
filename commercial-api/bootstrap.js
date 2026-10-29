@@ -1,5 +1,7 @@
 import pg from 'pg';
+import fs from 'node:fs/promises';
 import './runtime-readiness.js';
+import { WPGoPricing } from '../pricing-config.js';
 await import('./stripe-runtime-check.js');
 
 const { Pool } = pg;
@@ -40,9 +42,24 @@ async function promoteFounderSites() {
   }
 }
 
+async function importCommercialServer() {
+  const sourceUrl = new URL('./server-v2.js', import.meta.url);
+  const runtimeUrl = new URL('./.wpgo-server-v2-runtime.mjs', import.meta.url);
+  let source = await fs.readFile(sourceUrl, 'utf8');
+  const replacements = [
+    ['yearly_eur:60.69', `yearly_eur:${WPGoPricing.solo.yearly}`],
+    ['yearly_eur:132.09', `yearly_eur:${WPGoPricing.pro.yearly}`],
+    ['yearly_eur:254.49', `yearly_eur:${WPGoPricing.agency.yearly}`],
+    ['yearly_eur:407.49', `yearly_eur:${WPGoPricing.scale.yearly}`]
+  ];
+  for (const [from, to] of replacements) source = source.split(from).join(to);
+  await fs.writeFile(runtimeUrl, source, 'utf8');
+  await import(`${runtimeUrl.href}?v=${Date.now()}`);
+}
+
 await promoteFounderSites();
 await import('./multisite-license-guard.js');
 const loginEmail = await import('./login-email-route.js');
 loginEmail.installLoginEmailRouteGuard();
-await import('./server-v2.js');
+await importCommercialServer();
 loginEmail.restoreLoginEmailRouteGuard();
