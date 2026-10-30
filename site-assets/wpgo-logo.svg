@@ -1,47 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 240" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240" role="img" aria-labelledby="title desc">
   <title id="title">WP Virtuoso</title>
   <desc id="desc">WP Virtuoso glossy blue and turquoise technology logo.</desc>
   <defs>
-    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#20f0ff"/>
-      <stop offset="0.35" stop-color="#00a9ff"/>
-      <stop offset="0.7" stop-color="#1559ef"/>
-      <stop offset="1" stop-color="#071a72"/>
-    </linearGradient>
-    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#07154f"/>
-      <stop offset="0.45" stop-color="#0b55d7"/>
-      <stop offset="1" stop-color="#22f0e8"/>
-    </linearGradient>
-    <linearGradient id="textBlue" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1fd8ff"/>
-      <stop offset="0.45" stop-color="#0685ff"/>
-      <stop offset="1" stop-color="#0b49db"/>
-    </linearGradient>
-    <linearGradient id="textNavy" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1456cb"/>
-      <stop offset="0.45" stop-color="#0a2f86"/>
-      <stop offset="1" stop-color="#04113f"/>
-    </linearGradient>
-    <radialGradient id="node" cx="35%" cy="25%" r="70%">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.12" stop-color="#80ffff"/>
-      <stop offset="0.42" stop-color="#12d8f5"/>
-      <stop offset="0.78" stop-color="#0875e8"/>
-      <stop offset="1" stop-color="#092c91"/>
-    </radialGradient>
-    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
-      <feOffset dy="5" result="o"/>
-      <feColorMatrix in="o" type="matrix" values="0 0 0 0 0.02 0 0 0 0 0.12 0 0 0 0 0.38 0 0 0 .45 0"/>
-      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="4" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#20f0ff"/><stop offset="0.35" stop-color="#00a9ff"/><stop offset="0.7" stop-color="#1559ef"/><stop offset="1" stop-color="#071a72"/></linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#07154f"/><stop offset="0.45" stop-color="#0b55d7"/><stop offset="1" stop-color="#22f0e8"/></linearGradient>
+    <linearGradient id="textBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1fd8ff"/><stop offset="0.45" stop-color="#0685ff"/><stop offset="1" stop-color="#0b49db"/></linearGradient>
+    <linearGradient id="textNavy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1456cb"/><stop offset="0.45" stop-color="#0a2f86"/><stop offset="1" stop-color="#04113f"/></linearGradient>
+    <radialGradient id="node" cx="35%" cy="25%" r="70%"><stop offset="0" stop-color="#ffffff"/><stop offset="0.12" stop-color="#80ffff"/><stop offset="0.42" stop-color="#12d8f5"/><stop offset="0.78" stop-color="#0875e8"/><stop offset="1" stop-color="#092c91"/></radialGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/><feOffset dy="5" result="o"/><feColorMatrix in="o" type="matrix" values="0 0 0 0 0.02 0 0 0 0 0.12 0 0 0 0 0.38 0 0 0 .45 0"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
   </defs>
-
   <g transform="translate(8 9)" filter="url(#shadow)">
     <path d="M20 78 L80 210 L130 118 L184 210 L246 72 L209 72 L184 132 L150 70 L117 70 L80 136 L52 78 Z" fill="url(#g1)"/>
     <path d="M49 72 L82 142 L117 78 L146 78 L112 142 L80 205 L18 72 Z" fill="url(#g2)" opacity=".95"/>
@@ -51,10 +19,9 @@
     <circle cx="150" cy="29" r="23" fill="url(#node)" stroke="#64ffff" stroke-width="3" filter="url(#glow)"/>
     <circle cx="233" cy="58" r="15" fill="url(#node)" stroke="#64ffff" stroke-width="2" filter="url(#glow)"/>
   </g>
-
   <g font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900">
-    <text x="290" y="166" font-size="126" fill="url(#textBlue)" letter-spacing="-8">WP</text>
-    <text x="510" y="166" font-size="115" fill="url(#textNavy)" letter-spacing="-6">Virtuoso</text>
+    <text x="300" y="164" font-size="118" fill="url(#textBlue)" letter-spacing="-7">WP</text>
+    <text x="500" y="164" font-size="106" fill="url(#textNavy)" letter-spacing="-4">Virtuoso</text>
   </g>
-  <circle cx="620" cy="72" r="14" fill="url(#node)" stroke="#52ffff" stroke-width="2" filter="url(#glow)"/>
+  <circle cx="598" cy="76" r="13" fill="url(#node)" stroke="#52ffff" stroke-width="2" filter="url(#glow)"/>
 </svg>
