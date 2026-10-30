@@ -13,7 +13,11 @@ const replacements = [
   ['yearly:254.49', `yearly:${WPGoPricing.agency.yearly}`],
   ['yearly:407.49', `yearly:${WPGoPricing.scale.yearly}`],
   ['save 15%', yearlySavingCopy],
-  ['15% off yearly.', `${yearlySavingShortCopy.charAt(0).toUpperCase()}${yearlySavingShortCopy.slice(1)} yearly.`]
+  ['15% off yearly.', `${yearlySavingShortCopy.charAt(0).toUpperCase()}${yearlySavingShortCopy.slice(1)} yearly.`],
+  ["<div class=\"stat\">${esc(p.name)}</div>", "<div class=\"stat\">${esc(p.id==='founder'?'Active':p.name)}</div>"],
+  ["u.unlimited?'Unlimited founder usage':", "u.unlimited?'Account active':"],
+  ["p.id==='founder'?'Founder account · permanently unlimited · no billing required.':'Stripe manages paid subscriptions securely.'", "p.id==='founder'?'Your WP Virtuoso account is active.':'Stripe manages paid subscriptions securely.'"],
+  ["<p class=\"small\">Founder view of recent contact, bug and feedback submissions.</p>", "<p class=\"small\">Recent contact, bug and feedback submissions.</p>"]
 ];
 for (const [from, to] of replacements) source = source.split(from).join(to);
 
