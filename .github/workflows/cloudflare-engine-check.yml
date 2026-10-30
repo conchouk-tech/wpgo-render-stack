@@ -1,0 +1,44 @@
+name: Cloudflare Engine Check
+
+on:
+  pull_request:
+    paths:
+      - 'cloudflare-engine/**'
+      - '.github/workflows/cloudflare-engine-check.yml'
+  push:
+    branches:
+      - wp-virtuoso-cloudflare-engine
+    paths:
+      - 'cloudflare-engine/**'
+      - '.github/workflows/cloudflare-engine-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check Worker
+        run: node --check cloudflare-engine/src/index.js
+      - name: Validate package JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('cloudflare-engine/package.json','utf8')); console.log('package.json OK')"
+      - name: Check Render URLs are not embedded in new engine
+        run: |
+          if grep -RIn --exclude='README.md' 'onrender\.com' cloudflare-engine; then
+            echo 'Render URL found in new Cloudflare engine.'
+            exit 1
+          fi
+      - name: Verify required API routes exist
+        run: |
+          grep -q '/v1/auth/request-code' cloudflare-engine/src/index.js
+          grep -q '/v1/auth/verify-code' cloudflare-engine/src/index.js
+          grep -q '/v1/account' cloudflare-engine/src/index.js
+          grep -q '/v1/billing/checkout' cloudflare-engine/src/index.js
+          grep -q '/v1/billing/webhook' cloudflare-engine/src/index.js
+          grep -q '/v1/license/validate' cloudflare-engine/src/index.js
+          grep -q '/v1/meter/consume' cloudflare-engine/src/index.js
