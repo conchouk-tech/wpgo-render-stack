@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wp-virtuoso-engine",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-30",
+  "observability": { "enabled": true },
+  "vars": {
+    "PUBLIC_SITE_URL": "https://wpgo.vivaforte.es",
+    "ALLOWED_ORIGINS": "https://wpgo.vivaforte.es,https://wp-virtuoso.com,https://www.wp-virtuoso.com",
+    "DEV_AUTH": "0",
+    "LOGIN_CODE_MINUTES": "10"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wp-virtuoso-production",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
